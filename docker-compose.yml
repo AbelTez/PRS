@@ -1,0 +1,35 @@
+# Ethio Referral Linkage — local development stack
+#
+# Postgres + PostGIS only. Run the API and web app on the host with npm so you
+# get hot reload. In production this same compose file is the starting point for
+# an in-country deployment (see blueprint NFR-PRV-01 on data residency).
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: erl-db
+    environment:
+      POSTGRES_USER: erl
+      POSTGRES_PASSWORD: erl
+      POSTGRES_DB: erl_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - erl-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erl -d erl_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:4
+    container_name: erl-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  erl-pgdata:
