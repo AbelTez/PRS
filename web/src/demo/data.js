@@ -16,7 +16,7 @@ const minAgo = (m) => new Date(now() - m * 60000).toISOString();
 const hAgo = (h) => new Date(now() - h * 3600000).toISOString();
 const dAgo = (d) => new Date(now() - d * 86400000).toISOString();
 
-export const SEED_VERSION = 7; // bump to force reseed on deployed browsers
+export const SEED_VERSION = 8; // bump to force reseed on deployed browsers
 
 /* ============================================================ FACILITIES */
 export const FACILITIES = [

@@ -174,6 +174,139 @@ export class ReferralService {
     );
   }
 
+  /* --------------------------------------------- reception & assignment */
+
+  /** Roles that staff the referral reception desk of a facility. */
+  private static readonly RECEPTION_ROLES = ['liaison', 'triage', 'facility_admin'];
+  /** Roles that treat patients and therefore receive assignments. */
+  private static readonly CLINICAL_ROLES = ['doctor', 'clinician', 'specialist'];
+
+  /**
+   * Reception-first access.
+   *
+   * An inbound referral belongs to the receiving hospital's reception until a
+   * clinician is assigned to it. Most referrals need a specific specialty, so
+   * an unassigned clinician must not be able to open the chart: it makes the
+   * case nobody's responsibility and exposes patient data to staff with no
+   * role in that patient's care.
+   *
+   * Reception, administration, oversight and the origin side are unaffected.
+   */
+  private assertMayReadAtTarget(r: any, user: CurrentUser) {
+    const atTarget = r.target_facility_id === user.facilityId;
+    if (!atTarget) return;
+    if (!ReferralService.CLINICAL_ROLES.includes(user.role)) return;
+    if (r.assigned_doctor_id === user.id) return;
+    // The clinician who returns the outcome keeps access to their own case.
+    if (r.outcome_submitted_by === user.id || r.decision_by === user.id) return;
+
+    throw new ForbiddenException({
+      message: 'This referral has not been assigned to you',
+      hint: r.assigned_doctor_id
+        ? `The referral reception assigned it to ${r.assigned_doctor_name}.`
+        : 'The referral reception has not yet assigned a clinician to this case.',
+      awaitingAssignment: !r.assigned_doctor_id,
+    });
+  }
+
+  /** Clinicians of the receiving facility that reception can assign a case to. */
+  async assignableClinicians(referralId: string, user: CurrentUser) {
+    const r = await this.db.one(`SELECT * FROM referral WHERE id = $1`, [referralId]);
+    if (!r) throw new NotFoundException('Referral not found');
+    if (r.target_facility_id !== user.facilityId && user.role !== 'sysadmin') {
+      throw new ForbiddenException('Only the receiving facility assigns a clinician');
+    }
+    return this.db.query(
+      `SELECT id, full_name AS "fullName", role, title, department,
+              license_number AS "licenseNumber", phone,
+              (SELECT count(*)::int FROM referral a
+                WHERE a.assigned_doctor_id = u.id
+                  AND a.status NOT LIKE 'CLOSED_%') AS "activeCases"
+         FROM app_user u
+        WHERE u.facility_id = $1 AND u.status = 'active'
+          AND u.role = ANY($2::text[])
+        ORDER BY u.full_name`,
+      [r.target_facility_id, ReferralService.CLINICAL_ROLES],
+    );
+  }
+
+  /**
+   * Reception forwards the case to the clinician who will treat it.
+   * Re-assignment is allowed while the referral is open (the note explains why).
+   */
+  async assign(referralId: string, body: { doctorId?: string; note?: string }, user: CurrentUser) {
+    if (!ReferralService.RECEPTION_ROLES.includes(user.role) && user.role !== 'sysadmin') {
+      throw new ForbiddenException(
+        `Role '${user.role}' may not assign referrals — this is the referral reception's responsibility`,
+      );
+    }
+    const r = await this.db.one(`SELECT * FROM referral WHERE id = $1`, [referralId]);
+    if (!r) throw new NotFoundException('Referral not found');
+    if (r.target_facility_id !== user.facilityId && user.role !== 'sysadmin') {
+      throw new ForbiddenException('Only the receiving facility assigns a clinician to a referral');
+    }
+    if (isTerminal(r.status)) throw new BadRequestException('Closed referrals are immutable (BR-36)');
+    if (!body?.doctorId) throw new BadRequestException('doctorId is required');
+
+    const doctor = await this.db.one(
+      `SELECT * FROM app_user WHERE id = $1 AND facility_id = $2`,
+      [body.doctorId, r.target_facility_id],
+    );
+    if (!doctor) {
+      throw new BadRequestException('That clinician is not registered at the receiving facility');
+    }
+    if (doctor.status !== 'active') {
+      throw new BadRequestException('That account is not active — the facility IT administrator must verify it first');
+    }
+    if (!ReferralService.CLINICAL_ROLES.includes(doctor.role)) {
+      throw new BadRequestException({
+        message: 'Referrals can only be assigned to a treating clinician',
+        allowedRoles: ReferralService.CLINICAL_ROLES,
+      });
+    }
+
+    const reassignment = !!r.assigned_doctor_id && r.assigned_doctor_id !== doctor.id;
+    const updated = await this.db.one(
+      `UPDATE referral
+          SET assigned_doctor_id = $2, assigned_doctor_name = $3,
+              assigned_at = now(), assigned_by = $4, assigned_by_name = $5,
+              assignment_note = $6, updated_at = now(), version = version + 1
+        WHERE id = $1 RETURNING *`,
+      [referralId, doctor.id, doctor.full_name, user.id, user.fullName, body.note ?? null],
+    );
+
+    await this.db.query(
+      `INSERT INTO referral_transition
+         (referral_id, from_status, to_status, event, actor_user_id, actor_user_name,
+          actor_facility_id, note)
+       VALUES ($1,$2,$2,$3,$4,$5,$6,$7)`,
+      [referralId, r.status, reassignment ? 'reassign' : 'assign', user.id, user.fullName,
+       user.facilityId,
+       `${reassignment ? 'Reassigned' : 'Assigned'} to ${doctor.full_name}`
+         + `${doctor.department ? ` (${doctor.department})` : ''}`
+         + `${body.note ? ` — ${body.note}` : ''}`],
+    );
+
+    await this.audit.record({
+      actorUserId: user.id, actorFacilityId: user.facilityId,
+      action: reassignment ? 'referral_reassign' : 'referral_assign',
+      resourceType: 'referral', resourceId: referralId,
+      detail: { doctorId: doctor.id, doctorName: doctor.full_name },
+    });
+
+    await this.notifier.queue({
+      channel: 'in_app',
+      recipient: doctor.phone || doctor.id,
+      template: 'referral_assigned',
+      body: `[${String(r.urgency).toUpperCase()}] Referral ${r.referral_code} from `
+        + `${r.origin_facility_name} has been assigned to you by ${user.fullName}. `
+        + `Dx: ${r.provisional_diagnosis}.`,
+      referralId,
+    });
+
+    return this.get(referralId, user);
+  }
+
   /* -------------------------------------------------------------- create */
 
   async create(dto: CreateReferralDto, user: CurrentUser) {
@@ -379,6 +512,10 @@ export class ReferralService {
         || event === 'reservation_lapse'
         ? 'system'
         : this.actorSide(r, user);
+
+      // Acting on a case is at least as sensitive as reading it: a clinician at
+      // the receiving facility may only act once reception has assigned it.
+      if (side === 'target') this.assertMayReadAtTarget(r, user);
 
       const check = resolve(r.status as ReferralState, event, side);
       if (!check.ok) throw new BadRequestException(check.error);
@@ -804,6 +941,19 @@ export class ReferralService {
         kind: a.kind, uploadedAt: a.uploaded_at, uploadedBy: a.uploaded_by_name,
       })),
       ...(feedback !== undefined ? { feedback } : {}),
+      assignment: r.assigned_doctor_id ? {
+        doctorId: r.assigned_doctor_id,
+        doctorName: r.assigned_doctor_name,
+        assignedAt: r.assigned_at,
+        assignedByName: r.assigned_by_name,
+        note: r.assignment_note,
+        isMine: r.assigned_doctor_id === user.id,
+      } : null,
+      awaitingAssignment: !r.assigned_doctor_id && !isTerminal(r.status),
+      /** Reception (and only reception) may forward the case to a clinician. */
+      canAssign: r.target_facility_id === user.facilityId
+        && (ReferralService.RECEPTION_ROLES.includes(user.role) || user.role === 'sysadmin')
+        && !isTerminal(r.status),
       patient: patient ? {
         id: patient.id,
         name: [patient.given_name_lat, patient.fathers_name_lat, patient.grandfathers_name_lat]
@@ -894,6 +1044,10 @@ export class ReferralService {
       throw new ForbiddenException('BR-51: your facility is not a party to this referral');
     }
 
+    // Reception-first: at the receiving facility a clinician reads the chart
+    // only once the case has been assigned to them.
+    this.assertMayReadAtTarget(r, user);
+
     await this.audit.record({
       actorUserId: user.id, actorFacilityId: user.facilityId,
       action: 'read_payload', resourceType: 'referral', resourceId: id,
@@ -918,6 +1072,9 @@ export class ReferralService {
   async list(user: CurrentUser, q: {
     direction?: 'inbound' | 'outbound' | 'all';
     status?: string; urgency?: string; limit?: number; offset?: number;
+    /** Reception and clinician queue filters (query strings, hence the union). */
+    assignedToMe?: string | boolean;
+    unassigned?: string | boolean;
   }) {
     const where: string[] = [];
     const vals: any[] = [];
@@ -936,6 +1093,21 @@ export class ReferralService {
       vals.push(user.facilityId); i++;
     }
 
+    // Reception-first: a clinician's inbound list is what reception assigned to
+    // them, not the hospital's whole queue. Their own outbound referrals and
+    // anything they were already responsible for stay visible.
+    if (ReferralService.CLINICAL_ROLES.includes(user.role)) {
+      where.push(`(origin_facility_id = $${i} OR assigned_doctor_id = $${i + 1}
+                   OR decision_by = $${i + 1} OR outcome_submitted_by = $${i + 1})`);
+      vals.push(user.facilityId, user.id); i += 2;
+    }
+    if (q.assignedToMe === 'true' || q.assignedToMe === true) {
+      where.push(`assigned_doctor_id = $${i++}`); vals.push(user.id);
+    }
+    if (q.unassigned === 'true' || q.unassigned === true) {
+      where.push(`assigned_doctor_id IS NULL`);
+    }
+
     if (q.status) { where.push(`status = ANY($${i++}::text[])`); vals.push(q.status.split(',')); }
     if (q.urgency) { where.push(`urgency = $${i++}`); vals.push(q.urgency); }
 
@@ -948,6 +1120,7 @@ export class ReferralService {
               r.origin_facility_id, r.target_facility_id,
               r.created_at, r.sla_deadline_at, r.sla_breached, r.decision, r.decline_reason,
               r.arrived_at, r.outcome_submitted_at, r.outcome_acknowledged_at, r.version,
+              r.assigned_doctor_id, r.assigned_doctor_name, r.assigned_at,
               p.given_name_lat, p.fathers_name_lat, p.sex, p.age_value, p.age_unit,
               (SELECT count(*)::int FROM referral_attachment a WHERE a.referral_id = r.id) AS "attachmentCount"
          FROM referral r JOIN patient p ON p.id = r.patient_id
@@ -963,6 +1136,10 @@ export class ReferralService {
       ...r,
       // Patients and administrative readers get the flow, not the diagnosis.
       provisional_diagnosis: ['patient', 'it_admin'].includes(user.role) ? null : r.provisional_diagnosis,
+      // Reception's working signal: inbound cases with nobody responsible yet.
+      awaitingAssignment: r.target_facility_id === user.facilityId
+        && !r.assigned_doctor_id && !String(r.status).startsWith('CLOSED_'),
+      assignedToMe: r.assigned_doctor_id === user.id,
       patientName: [r.given_name_lat, r.fathers_name_lat].filter(Boolean).join(' '),
       patientAge: r.age_value ? `${r.age_value} ${r.age_unit}` : null,
       slaRemainingMinutes: r.sla_deadline_at && SLA_ACTIVE_STATES.includes(r.status)

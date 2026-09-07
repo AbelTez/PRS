@@ -10,6 +10,7 @@ import {
 export function ReferralList() {
   const user = useAuth((s) => s.user);
   const senderRole = ['hew', 'doctor', 'clinician', 'specialist'].includes(user?.role);
+  const isReception = ['liaison', 'triage', 'facility_admin'].includes(user?.role);
   const [dir, setDir] = useState(senderRole ? 'outbound' : 'inbound');
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
@@ -21,6 +22,8 @@ export function ReferralList() {
   useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, [load]);
 
   const tabs = [['inbound', 'Inbound'], ['outbound', 'Outbound'], ['all', 'All']];
+  // Reception is on standby for these: nobody is responsible for the patient yet.
+  const unassigned = (rows || []).filter((r) => r.awaitingAssignment);
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4">
@@ -28,6 +31,30 @@ export function ReferralList() {
         <h1 className="text-xl font-bold">Referrals</h1>
         {senderRole && <Link to="/new"><Button>+ New referral</Button></Link>}
       </div>
+
+      {isReception && unassigned.length > 0 && dir !== 'outbound' && (
+        <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
+          <p className="font-semibold text-amber-900">
+            {unassigned.length} referral{unassigned.length === 1 ? '' : 's'} waiting at reception
+          </p>
+          <p className="mt-0.5 text-sm text-amber-800">
+            No clinician is responsible for {unassigned.length === 1 ? 'this patient' : 'these patients'} yet.
+            Open each one and assign the doctor or specialist who should treat them.
+          </p>
+        </div>
+      )}
+
+      {senderRole && rows?.some((r) => r.assignedToMe) && dir !== 'outbound' && (
+        <div className="rounded-xl bg-brand-50 p-4 ring-1 ring-brand-200">
+          <p className="font-semibold text-brand-800">
+            {rows.filter((r) => r.assignedToMe).length} case
+            {rows.filter((r) => r.assignedToMe).length === 1 ? '' : 's'} assigned to you
+          </p>
+          <p className="mt-0.5 text-sm text-brand-700">
+            Reception has made you responsible for these patients — respond as soon as you can.
+          </p>
+        </div>
+      )}
 
       <div className="flex gap-1 rounded-lg bg-slate-200 p-1">
         {tabs.map(([k, l]) => (
@@ -40,6 +67,12 @@ export function ReferralList() {
       </div>
 
       <ErrorBox error={error} onDismiss={() => setError(null)} />
+
+      {senderRole && dir === 'inbound' && rows?.length === 0 && (
+        <p className="text-center text-sm text-slate-500">
+          Inbound cases appear here once your hospital's referral reception assigns one to you.
+        </p>
+      )}
 
       {!rows ? <Spinner /> : rows.length === 0 ? (
         <Card><Empty>No referrals here yet.</Empty></Card>
@@ -55,6 +88,12 @@ export function ReferralList() {
                     <div className="flex flex-wrap items-center gap-2">
                       <UrgencyBadge urgency={r.urgency} />
                       <StatusBadge status={r.status} />
+                      {r.awaitingAssignment && (
+                        <Badge className="bg-amber-100 text-amber-900 ring-amber-600/30">Needs assignment</Badge>
+                      )}
+                      {r.assignedToMe && (
+                        <Badge className="bg-brand-100 text-brand-700 ring-brand-600/30">Assigned to you</Badge>
+                      )}
                       {r.attachmentCount > 0 && (
                         <span className="text-xs text-slate-500" title="Attachments">🩻 {r.attachmentCount}</span>
                       )}
@@ -63,6 +102,7 @@ export function ReferralList() {
                     <p className="truncate text-sm text-slate-600">{r.provisional_diagnosis}</p>
                     <p className="mt-1 text-xs text-slate-500">
                       {r.origin_facility_name} → {r.target_facility_name}
+                      {r.assigned_doctor_name && !r.assignedToMe && ` · ${r.assigned_doctor_name}`}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
@@ -116,6 +156,115 @@ function SenderCard({ r }) {
   );
 }
 
+/* ============================================ RECEPTION ASSIGNMENT */
+/**
+ * The receiving hospital's reception desk decides which clinician takes the
+ * case. Until that happens nobody is responsible for the patient — and no
+ * clinician can open the chart — so this card is deliberately prominent while
+ * the referral is unassigned.
+ */
+function AssignmentCard({ r, onAssigned }) {
+  const [open, setOpen] = useState(false);
+  const [clinicians, setClinicians] = useState(null);
+  const [chosen, setChosen] = useState('');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function openPicker() {
+    setOpen(true); setError(null); setClinicians(null);
+    try { setClinicians(await get(`/v1/referrals/${r.id}/assignable-clinicians`)); }
+    catch (e) { setError(e); }
+  }
+
+  async function submit() {
+    setBusy(true); setError(null);
+    try {
+      await post(`/v1/referrals/${r.id}/assign`, { doctorId: chosen, note: note || undefined });
+      setOpen(false); setChosen(''); setNote('');
+      onAssigned();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  }
+
+  const a = r.assignment;
+
+  return (
+    <>
+      <Card title="Reception & assignment"
+            subtitle={a ? 'This case has a named clinician responsible for it'
+              : 'Inbound referrals wait at reception until a clinician is assigned'}
+            actions={r.canAssign && (
+              <Button variant={a ? 'ghost' : 'primary'} onClick={openPicker}>
+                {a ? 'Reassign' : 'Assign clinician'}
+              </Button>
+            )}>
+        {a ? (
+          <div className="rounded-lg bg-brand-50 p-3">
+            <p className="font-semibold text-brand-800">{a.doctorName}
+              {a.isMine && <Badge className="ml-2 bg-brand-600 text-white ring-brand-700">Assigned to you</Badge>}
+            </p>
+            <p className="mt-0.5 text-sm text-slate-600">
+              Assigned by {a.assignedByName} · {timeAgo(a.assignedAt)}
+            </p>
+            {a.note && <p className="mt-1 text-sm text-slate-700">“{a.note}”</p>}
+          </div>
+        ) : (
+          <div className="rounded-lg bg-amber-50 p-3 ring-1 ring-amber-200">
+            <p className="font-medium text-amber-900">Awaiting assignment</p>
+            <p className="text-sm text-amber-800">
+              No clinician is responsible for this patient yet. Most referrals need a
+              particular specialty — assign the right one so they can open the case.
+            </p>
+          </div>
+        )}
+      </Card>
+
+      <Modal open={open} title="Assign this referral" wide onClose={() => setOpen(false)}>
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            The clinician you choose becomes responsible for this patient and is the
+            only doctor who can open the chart. Reason for referral:{' '}
+            <span className="font-medium">{humanCode(r.reason_code)}</span>.
+          </p>
+          <ErrorBox error={error} onDismiss={() => setError(null)} />
+          {!clinicians ? <Spinner /> : clinicians.length === 0 ? (
+            <Empty>No active clinicians are registered at this facility yet — the IT administrator adds them.</Empty>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {clinicians.map((c) => (
+                <button key={c.id} type="button" onClick={() => setChosen(c.id)}
+                        className={`w-full rounded-lg p-3 text-left ring-2 transition
+                          ${chosen === c.id ? 'bg-brand-50 ring-brand-500' : 'bg-white ring-slate-200 hover:ring-slate-300'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">{c.fullName}</p>
+                      <p className="text-sm text-slate-600">
+                        {c.title || humanCode(c.role)}{c.department ? ` · ${c.department}` : ''}
+                      </p>
+                      {c.licenseNumber && (
+                        <p className="text-xs text-slate-500">Licence <span className="font-mono">{c.licenseNumber}</span></p>
+                      )}
+                    </div>
+                    <span className={`shrink-0 text-xs ${c.activeCases > 4 ? 'text-amber-700' : 'text-slate-500'}`}>
+                      {c.activeCases} open case{c.activeCases === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <Field label="Note for the clinician" hint="Why this doctor — e.g. 'on call for obstetrics tonight'">
+            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+          <Button className="w-full" disabled={busy || !chosen} onClick={submit}>
+            {busy ? 'Assigning…' : 'Assign and notify'}
+          </Button>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
 /* ================================================== REFERRAL DETAIL */
 export function ReferralDetail() {
   const { id } = useParams();
@@ -155,7 +304,28 @@ export function ReferralDetail() {
   /** Content is fetched on demand — every read is audited server-side. */
   const openAttachment = (a) => get(`/v1/referrals/${id}/attachments/${a.id}`);
 
-  if (!r) return <Spinner />;
+  // A clinician who has not been assigned the case cannot open it — explain
+  // that rather than showing a bare permission error.
+  if (!r && error?.status === 403) {
+    const d = error.detail || {};
+    return (
+      <div className="mx-auto max-w-2xl space-y-4 p-4">
+        <Link to="/referrals" className="text-sm text-brand-600">← All referrals</Link>
+        <Card title="Not assigned to you">
+          <p className="text-slate-700">
+            {d.awaitingAssignment
+              ? 'This referral is still with the hospital’s referral reception. A clinician has not been assigned to it yet.'
+              : d.hint || 'This case has been assigned to another clinician.'}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">
+            Referrals are assigned by reception so that every patient has one clinician
+            responsible for them. Ask the referral liaison if this case should be yours.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+  if (!r) return error ? <div className="p-4"><ErrorBox error={error} /></div> : <Spinner />;
   const can = (e) => (r.allowedEvents || []).includes(e);
   const side = r.actorSide;
   const sla = slaLabel(r.slaRemainingMinutes);
@@ -207,6 +377,11 @@ export function ReferralDetail() {
 
       {/* Receiving side sees exactly who sent this and from where */}
       {side === 'target' && <SenderCard r={r} />}
+
+      {/* Reception owns the inbound case until a clinician is named for it. */}
+      {side === 'target' && (r.assignment || r.canAssign) && (
+        <AssignmentCard r={r} onAssigned={load} />
+      )}
 
       {/* ---------------- ACTIONS driven by the server's state machine */}
       <ErrorBox error={error} onDismiss={() => setError(null)} />
@@ -481,14 +656,38 @@ export function Dashboard() {
 /* --------- clinician: only their own referrals, no feedback, no ratings */
 function MyWorkDashboard({ m }) {
   const t = m.totals;
+  const a = m.assignedToMe;
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4">
       <div>
         <h1 className="text-xl font-bold">My referrals</h1>
         <p className="text-sm text-slate-500">
-          {m.viewer.name} · {m.viewer.facilityName} — your own referral activity.
+          {m.viewer.name} · {m.viewer.facilityName} — cases assigned to you, and referrals you sent.
         </p>
       </div>
+
+      {/* Cases reception made this clinician responsible for. */}
+      {a && (a.open > 0 || a.total > 0) && (
+        <Card title="Assigned to you"
+              subtitle="Cases the referral reception has made you responsible for">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Open cases" value={a.open}
+                  tone={a.open > 0 ? 'text-brand-700' : 'text-slate-900'} />
+            <Stat label="Need your response" value={a.needsResponse}
+                  tone={a.needsResponse > 0 ? 'text-red-600' : 'text-slate-900'}
+                  sub="accept or decline" />
+            <Stat label="Open emergencies" value={a.openEmergencies}
+                  tone={a.openEmergencies > 0 ? 'text-red-600' : 'text-slate-900'} />
+            <Stat label="Outcomes due" value={a.outcomesDue}
+                  tone={a.outcomesDue > 0 ? 'text-amber-600' : 'text-slate-900'} />
+          </div>
+          {a.needsResponse > 0 && (
+            <Link to="/referrals" className="mt-3 inline-block text-sm font-medium text-brand-700 underline">
+              Respond now →
+            </Link>
+          )}
+        </Card>
+      )}
 
       <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">My loop-closure rate</p>
@@ -540,7 +739,24 @@ function FacilityOpsDashboard({ m }) {
         <p className="text-sm text-slate-500">{m.viewer.facilityName} — your live referral workload.</p>
       </div>
 
+      {q.awaitingAssignment > 0 && (
+        <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
+          <p className="font-semibold text-amber-900">
+            {q.awaitingAssignment} referral{q.awaitingAssignment === 1 ? '' : 's'} waiting at reception
+          </p>
+          <p className="mt-0.5 text-sm text-amber-800">
+            Assign a clinician so someone is responsible — no doctor can open these cases until you do.
+          </p>
+          <Link to="/referrals" className="mt-2 inline-block text-sm font-medium text-amber-900 underline">
+            Open the inbound queue →
+          </Link>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Awaiting assignment" value={q.awaitingAssignment}
+              tone={q.awaitingAssignment > 0 ? 'text-amber-600' : 'text-slate-900'}
+              sub="nobody responsible yet" />
         <Stat label="Inbound awaiting decision" value={q.inboundAwaitingDecision}
               tone={q.inboundAwaitingDecision > 0 ? 'text-blue-600' : 'text-slate-900'} />
         <Stat label="Escalated (SLA breached)" value={q.inboundEscalated}

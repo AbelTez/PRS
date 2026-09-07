@@ -32,6 +32,14 @@ export class AttachmentsService {
     if (!clinicalRoles.includes(user.role) || (!party && user.role !== 'sysadmin')) {
       throw new ForbiddenException('BR-51: only the clinical teams party to this referral can access its attachments');
     }
+    // Imaging is part of the chart: at the receiving facility a clinician needs
+    // the case assigned to them, exactly as for the referral itself.
+    const treating = ['doctor', 'clinician', 'specialist'].includes(user.role);
+    if (treating && r.target_facility_id === user.facilityId
+        && r.assigned_doctor_id !== user.id
+        && r.outcome_submitted_by !== user.id && r.decision_by !== user.id) {
+      throw new ForbiddenException('This referral has not been assigned to you');
+    }
     return r;
   }
 

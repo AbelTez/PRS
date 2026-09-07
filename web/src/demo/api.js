@@ -259,6 +259,27 @@ function suggest(body, user) {
 const CREATOR_ROLES = ['hew', 'doctor', 'clinician', 'liaison', 'triage', 'specialist', 'sysadmin'];
 const MANDATORY_VITALS = ['bpSystolic', 'bpDiastolic', 'pulse', 'respRate', 'temperatureC'];
 
+/* ------------------------------------------- reception & assignment */
+const RECEPTION_ROLES = ['liaison', 'triage', 'facility_admin'];
+const CLINICAL_ROLES = ['doctor', 'clinician', 'specialist'];
+
+/**
+ * Mirrors the server rule: at the receiving facility a clinician may only see
+ * or act on a referral once reception has assigned it to them.
+ */
+function assertMayReadAtTarget(r, user) {
+  if (r.targetFacilityId !== user.facilityId) return;
+  if (!CLINICAL_ROLES.includes(user.role)) return;
+  if (r.assignedDoctorId === user.id) return;
+  err(403, {
+    message: 'This referral has not been assigned to you',
+    hint: r.assignedDoctorId
+      ? `The referral reception assigned it to ${r.assignedDoctorName}.`
+      : 'The referral reception has not yet assigned a clinician to this case.',
+    awaitingAssignment: !r.assignedDoctorId,
+  });
+}
+
 function actorSide(r, user) {
   if (user.role === 'sysadmin') return 'system';
   if (r.originFacilityId === user.facilityId) return 'origin';
@@ -324,6 +345,18 @@ function hydrate(r, user) {
     })),
     allowedEvents: isTerminal(r.status) ? [] : allowedEvents(r.status),
     actorSide: side,
+    assignment: r.assignedDoctorId ? {
+      doctorId: r.assignedDoctorId,
+      doctorName: r.assignedDoctorName,
+      assignedAt: r.assignedAt,
+      assignedByName: r.assignedByName,
+      note: r.assignmentNote,
+      isMine: r.assignedDoctorId === user.id,
+    } : null,
+    awaitingAssignment: !r.assignedDoctorId && !isTerminal(r.status),
+    canAssign: r.targetFacilityId === user.facilityId
+      && (RECEPTION_ROLES.includes(user.role) || user.role === 'sysadmin')
+      && !isTerminal(r.status),
     slaRemainingMinutes: r.slaDeadlineAt && SLA_ACTIVE_STATES.includes(r.status)
       ? Math.round((new Date(r.slaDeadlineAt).getTime() - Date.now()) / 60000) : null,
     // Feedback follows the server rule: patients see their own; the facility's
@@ -458,6 +491,8 @@ function transition(id, event, payload, user) {
   if (user.role === 'patient') err(403, 'Patients cannot change referral state');
 
   const side = actorSide(r, user);
+  // Acting on a case requires the same assignment as reading it.
+  if (side === 'target') assertMayReadAtTarget(r, user);
   const chk = resolve(r.status, event, side);
   if (!chk.ok) err(400, chk.error);
   const from = r.status;
@@ -588,6 +623,10 @@ function listReferrals(user, q) {
   } else {
     rows = s.referrals.filter((r) => r.originFacilityId === user.facilityId || r.targetFacilityId === user.facilityId);
   }
+  // Reception-first: a clinician's inbound queue is what was assigned to them.
+  if (CLINICAL_ROLES.includes(user.role)) {
+    rows = rows.filter((r) => r.originFacilityId === user.facilityId || r.assignedDoctorId === user.id);
+  }
   const urgencyRank = { emergency: 0, urgent: 1, routine: 2 };
   return rows
     .slice()
@@ -606,6 +645,10 @@ function listReferrals(user, q) {
         arrived_at: r.arrivedAt, outcome_submitted_at: r.outcomeSubmittedAt,
         patientName: p?.name, sex: p?.sex, patientAge: p ? `${p.ageValue} ${p.ageUnit}` : null,
         attachmentCount: (r.attachments || []).length,
+        assigned_doctor_name: r.assignedDoctorName || null,
+        awaitingAssignment: r.targetFacilityId === user.facilityId
+          && !r.assignedDoctorId && !isTerminal(r.status),
+        assignedToMe: r.assignedDoctorId === user.id,
         slaRemainingMinutes: r.slaDeadlineAt && SLA_ACTIVE_STATES.includes(r.status)
           ? Math.round((new Date(r.slaDeadlineAt).getTime() - Date.now()) / 60000) : null,
       };
@@ -899,6 +942,68 @@ export async function demoApi(method, path, body) {
     return hydrate(r, user);
   }
 
+  /* ---------- reception: assignable clinicians & assignment ---------- */
+  const mClin = p.match(/^\/v1\/referrals\/([^/]+)\/assignable-clinicians$/);
+  if (method === 'GET' && mClin) {
+    const r = s.referrals.find((x) => x.id === mClin[1]);
+    if (!r) err(404, 'Referral not found');
+    if (!RECEPTION_ROLES.includes(user.role) && user.role !== 'sysadmin') {
+      err(403, `Role '${user.role}' may not assign referrals — this is the referral reception's responsibility`);
+    }
+    if (r.targetFacilityId !== user.facilityId && user.role !== 'sysadmin') {
+      err(403, 'Only the receiving facility assigns a clinician');
+    }
+    return s.users
+      .filter((u) => u.facilityId === r.targetFacilityId && u.status === 'active'
+        && CLINICAL_ROLES.includes(u.role))
+      .map((u) => ({
+        id: u.id, fullName: u.fullName, role: u.role, title: u.title,
+        department: u.department, licenseNumber: u.licenseNumber, phone: u.phone,
+        activeCases: s.referrals.filter((x) => x.assignedDoctorId === u.id && !isTerminal(x.status)).length,
+      }));
+  }
+
+  const mAssign = p.match(/^\/v1\/referrals\/([^/]+)\/assign$/);
+  if (method === 'POST' && mAssign) {
+    const r = s.referrals.find((x) => x.id === mAssign[1]);
+    if (!r) err(404, 'Referral not found');
+    if (!RECEPTION_ROLES.includes(user.role) && user.role !== 'sysadmin') {
+      err(403, `Role '${user.role}' may not assign referrals — this is the referral reception's responsibility`);
+    }
+    if (r.targetFacilityId !== user.facilityId && user.role !== 'sysadmin') {
+      err(403, 'Only the receiving facility assigns a clinician to a referral');
+    }
+    if (isTerminal(r.status)) err(400, 'Closed referrals are immutable (BR-36)');
+    const doc = s.users.find((u) => u.id === body?.doctorId);
+    if (!doc || doc.facilityId !== r.targetFacilityId) {
+      err(400, 'That clinician is not registered at the receiving facility');
+    }
+    if (doc.status !== 'active') err(400, 'That account is not active');
+    if (!CLINICAL_ROLES.includes(doc.role)) {
+      err(400, { message: 'Referrals can only be assigned to a treating clinician', allowedRoles: CLINICAL_ROLES });
+    }
+    const reassignment = !!r.assignedDoctorId && r.assignedDoctorId !== doc.id;
+    r.assignedDoctorId = doc.id;
+    r.assignedDoctorName = doc.fullName;
+    r.assignedAt = nowIso();
+    r.assignedByName = user.fullName;
+    r.assignmentNote = body?.note || null;
+    r.version += 1;
+    r.transitions.push({
+      from: r.status, to: r.status, event: reassignment ? 'reassign' : 'assign',
+      actorName: user.fullName, at: nowIso(),
+      note: `${reassignment ? 'Reassigned' : 'Assigned'} to ${doc.fullName}`
+        + `${body?.note ? ` — ${body.note}` : ''}`,
+    });
+    notify({
+      channel: 'in_app', template: 'referral_assigned', referralId: r.id,
+      body: `[${r.urgency.toUpperCase()}] Referral ${r.code} assigned to you by ${user.fullName}.`,
+    });
+    audit(user, reassignment ? 'referral_reassign' : 'referral_assign', 'referral', r.id, { doctorId: doc.id });
+    save();
+    return hydrate(r, user);
+  }
+
   const mAct = p.match(/^\/v1\/referrals\/([^/]+)\/([a-z-]+)$/);
   if (method === 'POST' && mAct) {
     const [, id, action] = mAct;
@@ -924,6 +1029,7 @@ export async function demoApi(method, path, body) {
       const oversight = ['woreda', 'region', 'moh', 'cbhi', 'sysadmin'].includes(user.role);
       const party = r.originFacilityId === user.facilityId || r.targetFacilityId === user.facilityId;
       if (!party && !oversight) err(403, 'BR-51: your facility is not a party to this referral');
+      assertMayReadAtTarget(r, user);
     }
     audit(user, 'read_payload', 'referral', r.id);
     save();
@@ -1057,6 +1163,8 @@ export async function demoApi(method, path, body) {
         scope: 'facility_operations',
         viewer: { name: user.fullName, role: user.role, facilityName: user.facilityName },
         queue: {
+          awaitingAssignment: own((r) => r.targetFacilityId === user.facilityId
+            && !r.assignedDoctorId && !isTerminal(r.status)),
           inboundAwaitingDecision: own((r) => r.targetFacilityId === user.facilityId && ['SUBMITTED', 'ESCALATED'].includes(r.status)),
           inboundEscalated: own((r) => r.targetFacilityId === user.facilityId && r.status === 'ESCALATED'),
           acceptedAwaitingArrival: own((r) => r.targetFacilityId === user.facilityId && r.status === 'ACCEPTED'),
@@ -1075,9 +1183,17 @@ export async function demoApi(method, path, body) {
       const mine = s.referrals.filter((r) => r.referringUserId === user.id);
       const terminal = mine.filter((r) => isTerminal(r.status) && r.status !== 'CLOSED_CANCELLED');
       const closed = mine.filter((r) => r.status === 'CLOSED_COMPLETED');
+      const assigned = s.referrals.filter((r) => r.assignedDoctorId === user.id);
       return {
         scope: 'my_referrals',
         viewer: { name: user.fullName, role: user.role, facilityName: user.facilityName },
+        assignedToMe: {
+          total: assigned.length,
+          open: assigned.filter((r) => !isTerminal(r.status)).length,
+          needsResponse: assigned.filter((r) => SLA_ACTIVE_STATES.includes(r.status)).length,
+          openEmergencies: assigned.filter((r) => r.urgency === 'emergency' && !isTerminal(r.status)).length,
+          outcomesDue: assigned.filter((r) => ['ARRIVED', 'IN_CARE'].includes(r.status) && !r.outcomeSubmittedAt).length,
+        },
         totals: {
           sent: mine.length,
           loopsClosed: closed.length,

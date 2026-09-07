@@ -410,6 +410,19 @@ export class ScopedAnalyticsService {
         WHERE referring_user_id = $1 AND is_test_data = FALSE`,
       [user.id],
     );
+
+    // Cases reception has put this clinician's name against: their standby
+    // queue, and the measure of what they are accountable for.
+    const [assigned] = await this.db.query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE status NOT LIKE 'CLOSED_%')::int AS open,
+              count(*) FILTER (WHERE status IN ('SUBMITTED','ESCALATED','ACKNOWLEDGED'))::int AS needs_response,
+              count(*) FILTER (WHERE urgency = 'emergency' AND status NOT LIKE 'CLOSED_%')::int AS open_emergencies,
+              count(*) FILTER (WHERE status IN ('ARRIVED','IN_CARE') AND outcome_submitted_at IS NULL)::int AS outcomes_due
+         FROM referral
+        WHERE assigned_doctor_id = $1 AND is_test_data = FALSE`,
+      [user.id],
+    );
     const byStatus = await this.db.query(
       `SELECT status, count(*)::int AS n FROM referral
         WHERE referring_user_id = $1 AND is_test_data = FALSE
@@ -424,6 +437,13 @@ export class ScopedAnalyticsService {
         awaitingResponse: core.awaiting_response, awaitingReroute: core.awaiting_reroute,
         outcomesToAcknowledge: core.outcomes_to_acknowledge,
       },
+      assignedToMe: {
+        total: assigned.total,
+        open: assigned.open,
+        needsResponse: assigned.needs_response,
+        openEmergencies: assigned.open_emergencies,
+        outcomesDue: assigned.outcomes_due,
+      },
       myLoopClosureRatePct: core.terminal > 0
         ? Math.round((core.loops_closed / core.terminal) * 1000) / 10 : null,
       byStatus,
@@ -434,6 +454,8 @@ export class ScopedAnalyticsService {
   async facilityOps(user: CurrentUser) {
     const [core] = await this.db.query(
       `SELECT
+         count(*) FILTER (WHERE target_facility_id = $1 AND assigned_doctor_id IS NULL
+                            AND status NOT LIKE 'CLOSED_%')::int AS awaiting_assignment,
          count(*) FILTER (WHERE target_facility_id = $1 AND status IN ('SUBMITTED','ESCALATED'))::int AS inbound_awaiting_decision,
          count(*) FILTER (WHERE target_facility_id = $1 AND status = 'ESCALATED')::int AS inbound_escalated,
          count(*) FILTER (WHERE target_facility_id = $1 AND status = 'ACCEPTED')::int AS accepted_awaiting_arrival,
@@ -455,6 +477,7 @@ export class ScopedAnalyticsService {
       scope: 'facility_operations',
       viewer: { name: user.fullName, role: user.role, facilityName: user.facilityName },
       queue: {
+        awaitingAssignment: core.awaiting_assignment,
         inboundAwaitingDecision: core.inbound_awaiting_decision,
         inboundEscalated: core.inbound_escalated,
         acceptedAwaitingArrival: core.accepted_awaiting_arrival,

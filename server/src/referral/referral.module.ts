@@ -54,6 +54,22 @@ export class ReferralController {
     return this.svc.chain(id, user);
   }
 
+  /* ---- reception: forwarding the case to the clinician who will treat it */
+
+  /** Clinicians of the receiving facility, with their current caseload. */
+  @Get(':id/assignable-clinicians')
+  @Roles('liaison', 'triage', 'facility_admin', 'sysadmin')
+  assignable(@Param('id') id: string, @User() u: CurrentUser) {
+    return this.svc.assignableClinicians(id, u);
+  }
+
+  /** Assign (or reassign) the referral to a named clinician. */
+  @Post(':id/assign')
+  @Roles('liaison', 'triage', 'facility_admin', 'sysadmin')
+  assign(@Param('id') id: string, @Body() b: any, @User() u: CurrentUser) {
+    return this.svc.assign(id, b, u);
+  }
+
   /* ---- explicit lifecycle endpoints (Appendix B) */
   @Post(':id/submit')
   submit(@Param('id') id: string, @Body() b: any, @User() u: CurrentUser) {

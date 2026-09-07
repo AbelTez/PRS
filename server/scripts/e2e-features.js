@@ -133,6 +133,93 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   const attDenied = await api('GET', `/v1/referrals/${refId}/attachments/${att?.id}`, null, outsider.accessToken);
   ok('Non-party facility cannot access attachments (BR-51)', attDenied.status === 403, String(attDenied.status));
 
+  /* ------------------------- 2b. RECEPTION → CLINICIAN ASSIGNMENT */
+  console.log('\n\x1b[36m2b. Reception first, then assignment\x1b[0m');
+
+  // dr.tigist works at Black Lion (the receiving facility) but has not been
+  // given this case, so the chart must stay closed to her.
+  const drTigist = await login('dr.tigist');
+  const beforeAssign = await api('GET', `/v1/referrals/${refId}`, null, drTigist.accessToken);
+  ok('Unassigned clinician at the receiving facility cannot open the referral',
+    beforeAssign.status === 403, String(beforeAssign.status));
+  ok('...and is told it is awaiting assignment',
+    JSON.stringify(beforeAssign.body).includes('assigned'), JSON.stringify(beforeAssign.body).slice(0, 140));
+
+  const unassignedList = await api('GET', '/v1/referrals?direction=inbound', null, drTigist.accessToken);
+  ok('Unassigned clinician does not see it in their inbound list',
+    Array.isArray(unassignedList.body) && !unassignedList.body.some((x) => x.id === refId),
+    `${unassignedList.body?.length} rows`);
+
+  const attBlocked = await api('GET', `/v1/referrals/${refId}/attachments/${att?.id}`, null, drTigist.accessToken);
+  ok('Unassigned clinician cannot fetch the imaging either', attBlocked.status === 403, String(attBlocked.status));
+
+  const actBlocked = await api('POST', `/v1/referrals/${refId}/acknowledge`, {}, drTigist.accessToken);
+  ok('Unassigned clinician cannot act on the case', actBlocked.status === 403, String(actBlocked.status));
+
+  const receptionView = await api('GET', `/v1/referrals/${refId}`, null, liaisonBL.accessToken);
+  ok('Reception sees the case and may assign it',
+    receptionView.body.canAssign === true && receptionView.body.awaitingAssignment === true,
+    JSON.stringify({ canAssign: receptionView.body.canAssign, awaiting: receptionView.body.awaitingAssignment }));
+
+  const clinicians = await api('GET', `/v1/referrals/${refId}/assignable-clinicians`, null, liaisonBL.accessToken);
+  ok('Reception can list the facility clinicians', Array.isArray(clinicians.body) && clinicians.body.length > 0,
+    JSON.stringify(clinicians.body?.map?.((c) => c.fullName)));
+  ok('...with their current caseload', clinicians.body.every((c) => typeof c.activeCases === 'number'));
+  ok('...and only clinicians of THAT facility',
+    clinicians.body.every((c) => ['doctor', 'clinician', 'specialist'].includes(c.role)));
+
+  const drTigistRow = clinicians.body.find((c) => c.fullName.includes('Tigist'));
+  const cliniciansAsDoctor = await api('GET', `/v1/referrals/${refId}/assignable-clinicians`, null, drTigist.accessToken);
+  ok('A clinician cannot list/assign (reception responsibility)', cliniciansAsDoctor.status === 403,
+    String(cliniciansAsDoctor.status));
+
+  const selfAssign = await api('POST', `/v1/referrals/${refId}/assign`,
+    { doctorId: drTigistRow.id }, drTigist.accessToken);
+  ok('A clinician cannot assign the case to themselves', selfAssign.status === 403, String(selfAssign.status));
+
+  const badAssign = await api('POST', `/v1/referrals/${refId}/assign`,
+    { doctorId: itBL.user.id }, liaisonBL.accessToken);
+  ok('Cannot assign a referral to a non-clinical account', badAssign.status === 400, String(badAssign.status));
+
+  const otherFacilityDoc = await api('POST', `/v1/referrals/${refId}/assign`,
+    { doctorId: drSamuel.user.id }, liaisonBL.accessToken);
+  ok("Cannot assign to another hospital's clinician", otherFacilityDoc.status === 400,
+    String(otherFacilityDoc.status));
+
+  const assigned = await api('POST', `/v1/referrals/${refId}/assign`,
+    { doctorId: drTigistRow.id, note: 'On call for nephrology tonight' }, liaisonBL.accessToken);
+  ok('Reception assigns the case to a named clinician',
+    assigned.body.assignment?.doctorId === drTigistRow.id, JSON.stringify(assigned.body.assignment));
+  ok('Assignment records who assigned it', !!assigned.body.assignment?.assignedByName);
+
+  const afterAssign = await api('GET', `/v1/referrals/${refId}`, null, drTigist.accessToken);
+  ok('The assigned clinician can now open the chart', afterAssign.status === 200, String(afterAssign.status));
+  ok('...and sees it flagged as theirs', afterAssign.body.assignment?.isMine === true);
+  ok('...and can now fetch the imaging',
+    (await api('GET', `/v1/referrals/${refId}/attachments/${att?.id}`, null, drTigist.accessToken)).status === 200);
+
+  const assignedList = await api('GET', '/v1/referrals?direction=inbound', null, drTigist.accessToken);
+  ok('It now appears in the clinician inbound list',
+    assignedList.body.some((x) => x.id === refId && x.assignedToMe === true));
+
+  const drMulu = await login('dr.mulu'); // St Paul's — different hospital
+  ok("Another hospital's clinician still cannot open it",
+    (await api('GET', `/v1/referrals/${refId}`, null, drMulu.accessToken)).status === 403);
+
+  const trail = await api('GET', `/v1/referrals/${refId}`, null, liaisonBL.accessToken);
+  ok('Assignment is written to the referral audit trail',
+    trail.body.transitions.some((t) => t.event === 'assign'),
+    JSON.stringify(trail.body.transitions.map((t) => t.event)));
+
+  const recStats = await api('GET', '/v1/analytics/overview', null, liaisonBL.accessToken);
+  ok('Reception dashboard exposes the awaiting-assignment queue',
+    typeof recStats.body.queue?.awaitingAssignment === 'number',
+    JSON.stringify(recStats.body.queue));
+
+  const docStats = await api('GET', '/v1/analytics/overview', null, drTigist.accessToken);
+  ok('Clinician dashboard exposes their assigned caseload',
+    docStats.body.assignedToMe?.total >= 1, JSON.stringify(docStats.body.assignedToMe));
+
   /* --------------------------------------- 3. REAL WARD RESERVATIONS */
   console.log('\n\x1b[36m3. Real bed reservations\x1b[0m');
 

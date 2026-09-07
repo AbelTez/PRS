@@ -46,10 +46,12 @@ ethio-referral-linkage/
 ├── db/
 │   ├── migrations/
 │   │   ├── 001_init.sql          Core schema: 21 tables, views, indexes
-│   │   └── 002_roles_feedback_portal.sql
-│   │                             doctor/it_admin/patient roles, licence +
-│   │                             verification columns, referral_feedback,
-│   │                             facility addresses, reserved ward, attachment blob
+│   │   ├── 002_roles_feedback_portal.sql
+│   │   │                         doctor/it_admin/patient roles, licence +
+│   │   │                         verification columns, referral_feedback,
+│   │   │                         facility addresses, reserved ward, attachment blob
+│   │   └── 003_referral_assignment.sql
+│   │                             reception → clinician assignment (who, when, why)
 │   └── seed/seed.sql             Pilot network + history + feedback (see §5)
 ├── server/                       NestJS API — the ONLY place business rules live
 │   ├── scripts/
@@ -175,12 +177,43 @@ Public tracker demo: referral code `ERL-K7PM-42`, phone `0912000001`.
 Two separate questions: **what a role may DO**, and **what a role may SEE**.
 The second is the one that was tightened in this build.
 
+### Reception first, then assignment  ⚠ read before touching inbound access
+
+An inbound referral belongs to the receiving hospital's **reception desk** (the
+referral liaison), not to its doctors. Reception reviews the case and assigns it
+to the clinician who can actually treat it — most referrals need a particular
+specialty, so an arbitrary doctor picking a case up is unsafe and leaves nobody
+accountable.
+
+```
+  referral arrives ─► RECEPTION (liaison/triage/facility_admin)
+                        │  sees the whole inbound queue
+                        │  "awaiting assignment" until it acts
+                        ▼
+                      assigns a named clinician  ──► that clinician, and only
+                        │  (recorded: who, when, why)    that clinician, can
+                        ▼                                open the chart, the
+                      clinician accepts / declines,      imaging, and act on it
+                      treats, returns the outcome
+```
+
+Enforced server-side in `ReferralService.assertMayReadAtTarget` and applied to
+reads (`get`), the inbound list, every state transition, and attachment
+downloads. A clinician who opens an unassigned case gets a 403 carrying
+`awaitingAssignment`, which the UI renders as an explanation rather than an
+error. Reassignment is allowed while the referral is open and is recorded in
+the transition trail (`assign` / `reassign`).
+
+Standby signals: reception's dashboard leads with `awaitingAssignment`
+("nobody responsible yet"); a clinician's dashboard leads with
+`assignedToMe.needsResponse`.
+
 ### Actions
 
 | Role | Can do |
 |---|---|
-| `doctor`, `clinician`, `specialist`, `hew` | Create referrals from their own facility; depart; acknowledge outcomes; upload attachments |
-| `liaison`, `triage` | Receive: acknowledge / accept / decline / redirect; confirm arrival; submit outcomes; update beds & capabilities |
+| `doctor`, `clinician`, `specialist`, `hew` | Create referrals from their own facility; depart; acknowledge outcomes; upload attachments. **Inbound: only cases assigned to them.** |
+| `liaison`, `triage` | **Referral reception**: see the whole inbound queue and assign a clinician to each case. Acknowledge / accept / decline / redirect; confirm arrival; submit outcomes; update beds & capabilities |
 | `facility_admin` | Facility settings, capability matrix |
 | `it_admin` | Register, verify, deactivate staff of **their own facility**; read that facility's analytics and feedback |
 | `patient` | View own referrals; rate the two facilities after being received |
@@ -270,6 +303,8 @@ GET    /v1/capabilities  /v1/reason-codes
 POST   /v1/patients  /v1/patients/search
 GET    /v1/referrals  POST /v1/referrals
 GET    /v1/referrals/:id  /v1/referrals/:id/chain  /v1/referrals/code/:code
+GET    /v1/referrals/:id/assignable-clinicians   reception only
+POST   /v1/referrals/:id/assign                  reception assigns a clinician
 POST   /v1/referrals/:id/{acknowledge|accept|decline|redirect|reroute|depart|
                            arrive|start-care|outcome|acknowledge-outcome|cancel|…}
 POST   /v1/referrals/:id/attachments      upload imaging/document

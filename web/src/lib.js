@@ -24,6 +24,38 @@ export class ApiError extends Error {
   }
 }
 
+/* ------------------------------------------------------------- SESSION */
+/**
+ * A stored session is only usable if it is a JWT this deployment could have
+ * issued. Sessions left behind by the in-browser showcase build look like
+ * `demo-token-…`; sending one to the real API returns 401 on the first request
+ * and used to strand the user in a half-signed-in shell reading
+ * "Invalid or expired token". Discard anything that is not a JWT up front.
+ */
+const looksLikeJwt = (t) => typeof t === 'string' && t.split('.').length === 3;
+
+function readSession() {
+  const token = localStorage.getItem('erl_token');
+  if (DEMO_MODE ? !token : !looksLikeJwt(token)) {
+    clearSession();
+    return { user: null, token: null };
+  }
+  try {
+    return { token, user: JSON.parse(localStorage.getItem('erl_user') || 'null') };
+  } catch {
+    clearSession();
+    return { user: null, token: null };
+  }
+}
+
+function clearSession() {
+  localStorage.removeItem('erl_token');
+  localStorage.removeItem('erl_user');
+}
+
+/** Set by the auth store below so a rejected session also resets the UI. */
+let onSessionExpired = () => {};
+
 export async function api(method, path, body) {
   if (DEMO_MODE) {
     try {
@@ -31,10 +63,7 @@ export async function api(method, path, body) {
       await new Promise((r) => setTimeout(r, 120 + Math.random() * 180));
       return await demoApi(method, path, body);
     } catch (e) {
-      if (e.demoStatus === 401) {
-        localStorage.removeItem('erl_token');
-        localStorage.removeItem('erl_user');
-      }
+      if (e.demoStatus === 401) { clearSession(); onSessionExpired(); }
       throw new ApiError(e.demoStatus || 500, e.demoBody || { message: e.message });
     }
   }
@@ -51,8 +80,10 @@ export async function api(method, path, body) {
   try { json = await res.json(); } catch { /* empty body */ }
   if (!res.ok) {
     if (res.status === 401) {
-      localStorage.removeItem('erl_token');
-      localStorage.removeItem('erl_user');
+      // Clearing storage alone left the in-memory session intact, so the shell
+      // kept rendering as signed in. Reset both and let the router show login.
+      clearSession();
+      onSessionExpired();
     }
     throw new ApiError(res.status, json);
   }
@@ -65,8 +96,7 @@ export const put  = (p, b) => api('PUT', p, b);
 
 /* ----------------------------------------------------------------- AUTH */
 export const useAuth = create((set) => ({
-  user: JSON.parse(localStorage.getItem('erl_user') || 'null'),
-  token: localStorage.getItem('erl_token'),
+  ...readSession(),
 
   async login(username, password) {
     const r = await post('/v1/auth/login', { username, password });
@@ -77,11 +107,13 @@ export const useAuth = create((set) => ({
   },
 
   logout() {
-    localStorage.removeItem('erl_token');
-    localStorage.removeItem('erl_user');
+    clearSession();
     set({ user: null, token: null });
   },
 }));
+
+// A 401 anywhere ends the session in the UI too, not just in storage.
+onSessionExpired = () => useAuth.setState({ user: null, token: null });
 
 /* ------------------------------------------------------- DOMAIN HELPERS */
 

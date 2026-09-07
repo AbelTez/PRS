@@ -65,32 +65,61 @@ ordered, how many are waiting for a response, and which outcomes you still need
 to acknowledge. Hospital-wide statistics and patient feedback are handled by
 your hospital's IT/quality administrator, not shown here.
 
-**If you are the receiving doctor:** open the inbound referral and you'll see
-the complete picture — the clinical details, the attached imaging, and a
-**"Referred by" card with the sending doctor's name, title, license number,
-direct phone, and the sending facility's full address and switchboard**. If
-anything is unclear, call them directly; the number is right there.
+**If you are the receiving doctor:** you will see an inbound case **once your
+hospital's referral reception assigns it to you** — you'll find it under
+Referrals → Inbound marked "Assigned to you", and on your Dashboard under
+"Assigned to you". Until then the case is not visible to you, because it is
+not yet your responsibility.
+
+Once it is yours, you see the complete picture — the clinical details, the
+attached imaging, and a **"Referred by" card with the sending doctor's name,
+title, license number, direct phone, and the sending facility's full address
+and switchboard**. If anything is unclear, call them directly; the number is
+right there.
+
+**You are on standby for assigned cases.** When reception assigns you a
+patient, you are the named clinician responsible for them — respond
+(accept or decline) as soon as you can, especially for emergencies. If the
+case belongs to another specialty, tell the referral liaison and they will
+reassign it; that reassignment is recorded.
+
+*Why the gate?* Most referrals need a particular specialty. Letting any doctor
+open any case means no one is accountable for the patient and exposes records
+to staff not involved in their care. Assignment makes responsibility explicit.
 
 ---
 
-## 🛎️ For Referral Liaisons (receiving patients)
+## 🛎️ For Referral Liaisons — the referral reception
 
-You are the front door of your hospital. Your queue is the **Inbound** tab.
+You are the front door of your hospital, and you are **on standby for every
+incoming referral**. Nothing reaches a doctor until you send it to them.
+
+Your queue is the **Inbound** tab. Cases with nobody responsible yet are
+flagged **"Needs assignment"**, and your Dashboard leads with that count.
 
 **When a referral arrives:**
 1. Emergencies appear at the top with a countdown timer. Open one and read the
    summary, vitals and attachments.
-2. **Accept** if you can take the patient. Enter the receiving clinician's name
+2. **Assign the right clinician.** Tap **Assign clinician** and pick from your
+   hospital's registered doctors and specialists — you'll see each one's title,
+   department, licence and how many open cases they already carry. Add a short
+   note ("on call for obstetrics tonight") if it helps. The clinician is
+   notified, becomes the named person responsible for that patient, and is the
+   only doctor who can open the chart.
+   - Most referrals need a specific specialty, so this step matters clinically:
+     assigning the wrong specialty wastes time the patient may not have.
+   - Got it wrong, or the doctor went off shift? **Reassign** — it is recorded.
+3. **Accept** if you can take the patient. Enter the receiving clinician's name
    and phone (the sender and the patient both see it). Tick **Reserve a bed**
    and pick the ward — this takes a *real* bed off your availability board, so
    the promise is genuine. If there are no free beds in that ward, the system
    will tell you — update the board or accept without a reservation.
-3. **Decline** only with a reason from the list ("No bed", "No specialist"…).
+4. **Decline** only with a reason from the list ("No bed", "No specialist"…).
    You cannot decline without a reason — those reasons are how the health
    bureau learns where the gaps are and fixes them.
-4. **Redirect** if another facility suits the patient better — the referral
+5. **Redirect** if another facility suits the patient better — the referral
    chain stays connected.
-5. When the patient shows up, tap **Confirm arrival** (they'll show you their
+6. When the patient shows up, tap **Confirm arrival** (they'll show you their
    referral code). When treatment finishes, **Submit outcome** with follow-up
    instructions — the patient reads those instructions in their own portal.
 
@@ -100,10 +129,10 @@ scanner under maintenance"). Every update is stamped with your name and time.
 A stale board doesn't just mislead colleagues — the system marks your data as
 stale and sends you fewer appropriate referrals.
 
-**Your Dashboard** is your live workload: inbound waiting for a decision, how
-many have breached their response time, patients in transit to you, outcomes
-due, and your current bed board. Network-wide statistics and patient feedback
-are not part of this view.
+**Your Dashboard** is your live workload: referrals **awaiting assignment**,
+inbound waiting for a decision, how many have breached their response time,
+patients in transit to you, outcomes due, and your current bed board.
+Network-wide statistics and patient feedback are not part of this view.
 
 ---
 
