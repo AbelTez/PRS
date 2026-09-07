@@ -63,11 +63,18 @@ node scripts/e2e-test.js       # 71 checks — lifecycle and business rules
 node scripts/e2e-features.js   # 48 checks — roles, portal, feedback, RBAC
 ```
 
-### Static showcase build (optional)
+### Deployment
 
-`VITE_DEMO=1 npm run build` in `web/` produces a self-contained browser build with
-synthetic data — used for demonstrations without a server (Vercel-ready via
-`vercel.json`). The default build talks to the real API.
+The API and the web app deploy **together to one Vercel project** from this
+repository: pushing to `main` builds `server/` into a Vercel Function mounted at
+`/api/**` and serves the React build as the site, backed by a managed Postgres
+(`DATABASE_URL`). Architecture, environment variables and the first-time
+database setup are in [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) §9.2.
+`GET /api/health` reports whether a deployment's database and secrets are wired
+up.
+
+For a demonstration without any backend, `VITE_DEMO=1 npm run build` in `web/`
+produces a self-contained browser build on synthetic data.
 
 ---
 

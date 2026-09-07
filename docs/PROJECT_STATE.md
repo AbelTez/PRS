@@ -25,6 +25,7 @@ country-generic.
 | Area | State |
 |---|---|
 | Backend (NestJS + PostgreSQL) | **Working.** All business rules server-enforced. 119 automated checks pass. |
+| Deployment | **Working.** API + web ship together to Vercel from `main`; the deployed site uses the real database (§9.2). |
 | Database | **Real.** 2 migrations, seeded pilot network (19 facilities, 27 users, referral history, feedback). No hard-coded frontend data. |
 | Frontend (React + Vite) | **Working**, talks to the API by default. A browser-simulation mode (`VITE_DEMO=1`) exists for static showcase deploys. |
 | Auth & RBAC | JWT + role guard + facility scoping + IT-managed account verification. |
@@ -296,13 +297,90 @@ POST   /v1/admin/run-schedulers           sysadmin — run the clocks on demand
 
 ## 9. Deployment
 
-- **Local / pilot:** Docker Postgres + `npm start` on both server and web, or
-  build `web/` and serve `dist/` behind the API. Host **inside Ethiopia** —
-  Proclamation 1321/2024 restricts cross-border transfer of personal data.
-- **Static showcase:** `web/` builds with `VITE_DEMO=1` and deploys to Vercel
-  (`vercel.json` handles SPA rewrites). This is for demonstrations only — it
-  runs on synthetic in-browser data with no server and no real records.
-- **Never deploy the real API to a foreign cloud** without completing §10.
+### 9.1 Local / pilot
+
+Docker Postgres + `npm start` on both server and web, or build `web/` and serve
+`dist/` behind the API. For real patient data, host **inside Ethiopia** —
+Proclamation 1321/2024 restricts cross-border transfer (see §10).
+
+### 9.2 Vercel — the full stack in one project
+
+The deployed site runs the **real API against a real database**, not the browser
+showcase. Both halves ship from this repository, connected to GitHub
+(`AbelTez/PRS`); pushing to `main` deploys.
+
+```
+      ┌──────────────── one Vercel project, one domain ────────────────┐
+      │                                                                │
+      │  /                     → web/dist  (static React build)        │
+      │  /dashboard, /portal…  → rewritten to /index.html (SPA)        │
+      │  /api/health           → api/health.js   (no Nest, no DB)      │
+      │  /api/v1/**            → api/index.js → server/serverless.js   │
+      │                              └── boots the SAME AppModule      │
+      └───────────────────────────────┬────────────────────────────────┘
+                                      │ DATABASE_URL (TLS)
+                                      ▼
+                            Neon serverless Postgres
+```
+
+Key files: `vercel.json` (build, function config, rewrites), root
+`package.json` (build scripts), `api/index.js` (mount point),
+`server/serverless.js` (bootstrap).
+
+**Things worth knowing before you change any of it:**
+
+- **The API is mounted at `/api`, not `/v1`.** The client is built with
+  `VITE_API_BASE=/api`, so the browser calls `/api/v1/...`. `vercel.json`
+  rewrites `/api/(.*)` to the function and carries the real path in
+  `__erl_path`; `server/serverless.js` reconstructs Nest's route from it. A
+  catch-all `api/[...path].js` filename *builds* but is never routed by this
+  project type — that was verified against a live deployment, so do not
+  "simplify" it back.
+- **Compiled output, not sources.** The function requires `server/dist`,
+  because NestJS DI needs `emitDecoratorMetadata`, which the platform's
+  esbuild-based TypeScript handling does not emit.
+- **The handler lives in `server/`,** not `api/`, so `require`s resolve against
+  `server/node_modules`.
+- **No cron.** Serverless has no process between requests, so
+  `SchedulerTickInterceptor` runs the referral clocks on traffic (self
+  throttling, ~30 s). `ScheduleModule` is only registered off-serverless.
+- **Body limit is raised to 4 MB** in both entry points; the stock 100 kB JSON
+  limit would reject real X-ray/PDF attachments.
+- **Pool size is 1 per instance** on serverless — point `DATABASE_URL` at the
+  provider's *pooled* endpoint.
+
+**Environment variables** (Vercel → Settings → Environment Variables):
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Managed Postgres connection string (Neon adds this automatically) |
+| `JWT_SECRET`, `TOKEN_SECRET`, `HASH_PEPPER` | Secrets — never reuse the development values |
+| `PGSSL_NO_VERIFY` | Optional; `true` only if the provider's certificate chain fails |
+
+**First-time database setup** (run locally, pointed at the production database):
+
+```bash
+export DATABASE_URL='postgresql://…?sslmode=require'
+export HASH_PEPPER='<the same value set in Vercel>'
+npm run migrate
+node server/scripts/seed.js --force      # TRUNCATES — pilot data only
+```
+
+`HASH_PEPPER` must match the deployment: the seed binds patient phone hashes to
+it so phone lookups work.
+
+**Health check:** `GET /api/health` answers without booting Nest or touching the
+database, and reports whether the database and secrets are configured — check it
+first when a deployment misbehaves.
+
+### 9.3 Static showcase (no backend)
+
+Building `web/` with `VITE_DEMO=1` produces a self-contained bundle backed by
+the in-browser simulation in `web/src/demo/`. Useful for demonstrating without
+infrastructure; it is synthetic data and no real records.
+
+**Never deploy the real API to a foreign cloud** with real patient data without
+completing §10.
 
 ---
 
