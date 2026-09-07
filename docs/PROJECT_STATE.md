@@ -153,22 +153,58 @@ Two deliberate routing scenarios are seeded: Guder Primary has *no anaesthetist*
 (caesarean/anaesthesia unavailable with a visible note) and Zewditu's *CT scanner
 is under maintenance* — both appear as explained exclusions, never silent absences.
 
-Key accounts (password `Password123!` for all):
+**What the seed contains** (`db/seed/seed.sql`, loaded by `node server/scripts/seed.js --force`):
+
+| Data | Count | Notes |
+|---|---|---|
+| Facilities | 19 | tiers 1–5, with addresses and switchboards |
+| Capability matrix | 313 rows | including two deliberate outages (below) |
+| Bed capacity | 23 wards | one deliberately stale (>8 h) to show the freshness warning |
+| Reason codes | 16 | each with required capabilities and a stabilisation checklist |
+| **Users** | **63** | **3 or more for every one of the 14 roles** |
+| Patients | 24 | Ge'ez and Latin names, CBHI and pregnancy flags |
+| **Referrals** | **29** | **at least one in each of the 21 lifecycle statuses** |
+| Transitions | 160 | derived from each referral's status, so a trail can never contradict its row |
+| Assignments | 17 | reception → named clinician, with who/when/why |
+| Attachments | 8 | imaging and documents on referrals |
+| Patient feedback | 12 | ratings of both the referring and receiving facility |
+| Notifications | 8 | the SMS/in-app dispatch trail |
+
+Two routing scenarios are seeded on purpose: Guder Primary has **no anaesthetist**
+(caesarean and anaesthesia unavailable, with the reason attached) and Zewditu's
+**CT scanner is under maintenance**. Both appear as explained exclusions, never
+as a silent absence.
+
+**Scheduler stability.** The background clocks run on the live system, so seeded
+rows carry deadlines that keep them in the status they demonstrate — a
+`SUBMITTED` referral has its SLA deadline in the *future*, `IN_TRANSIT` has a
+future expected arrival, `ESCALATED` is already marked breached. Change those
+intervals with care or the data will drift the moment it is loaded.
+
+Key accounts (password `Password123!` for all — see the seed for the full 63):
 
 | Username | Role | Facility |
 |---|---|---|
-| `dr.abdi` | doctor | Ambo General Hospital |
-| `dr.samuel` | doctor | Zewditu Memorial |
-| `dr.tigist` | doctor | Black Lion |
+| `clin.ambohc` | clinician | Ambo Health Centre (sends referrals) |
+| `dr.abdi` / `dr.hanna` / `dr.bekele` | doctor | Ambo General — assignment targets |
+| `dr.tigist` / `dr.lidya` / `dr.tewodros` | doctor | Black Lion |
 | `dr.yonas` | doctor — **pending verification** | Black Lion |
-| `liaison.ambo` / `liaison.blacklion` / `liaison.y12` | liaison | respective hospitals |
+| `liaison.ambo` / `liaison.blacklion` / `liaison.zewditu` | liaison (**reception**) | respective hospitals |
+| `triage.ambo` | triage | Ambo General |
+| `spec.neuro` / `spec.psych` / `spec.eye` | specialist | Black Lion / Amanuel / Menelik II |
 | `it.ambo` / `it.blacklion` / `it.stpauls` | it_admin | respective hospitals |
-| `abeba.k` / `roba.d` | patient | — |
-| `hew.awaro` | health extension worker | Awaro Health Post |
+| `admin.ambo` | facility_admin | Ambo General |
+| `hew.awaro` / `hew.gosu` / `hew.dano` | health extension worker | health posts |
 | `woreda.ws` | woreda health office | West Shewa |
+| `rhb.oromia` / `rhb.aa` | regional health bureau | — |
+| `moh.referral` | federal ministry | — |
+| `cbhi.ws` | CBHI claims officer | — |
+| `abeba.k` / `roba.d` / `getahun.m` | patient portal | — |
 | `sysadmin` | system administrator | — |
 
 Public tracker demo: referral code `ERL-K7PM-42`, phone `0912000001`.
+Reception demo: sign in as `liaison.ambo` — several inbound referrals are
+seeded unassigned and flagged "Needs assignment".
 
 ---
 

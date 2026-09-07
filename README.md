@@ -143,29 +143,29 @@ feedback/analytics visibility rule.
 
 ## 2. Demo accounts
 
-All passwords are `Password123!`. Full list and the visibility matrix:
+All passwords are `Password123!`. The seed carries **63 accounts — three or more
+for every one of the 14 roles** — and **29 referrals covering all 21 lifecycle
+statuses**. Full inventory and the visibility matrix:
 [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) §5–6.
 
 | Username | Role | Facility |
 |---|---|---|
-| `dr.abdi` | Doctor (Medical Director) | Ambo General Hospital (tier 4) |
-| `dr.samuel` | Doctor (Internist) | Zewditu Memorial |
-| `dr.tigist` | Doctor (OB/GYN) | Black Lion |
-| `dr.yonas` | Doctor — **pending verification** | Black Lion |
-| `it.blacklion` / `it.ambo` / `it.stpauls` | Hospital IT administrator | respective hospitals |
-| `abeba.k` / `roba.d` | Patient (portal) | — |
-| `hew.awaro` | Health Extension Worker | Awaro Health Post (tier 1) |
-| `hew.gosu` | Health Extension Worker | Gosu Kora Health Post |
-| `clin.ambohc` | Clinician | Ambo Health Centre (tier 2) |
-| `clin.guderhc` | Clinician | Guder Health Centre |
-| `liaison.ambo` | Referral liaison | Ambo General Hospital (tier 4) |
-| `liaison.blacklion` / `liaison.stpauls` / `liaison.zewditu` / `liaison.y12` | Referral liaison | Addis hospitals |
-| `liaison.guder` | Referral liaison | Guder Primary Hospital (tier 3) |
-| `liaison.ginchi` | Referral liaison | Ginchi Primary Hospital (tier 3) |
+| `clin.ambohc` | Clinician — sends referrals | Ambo Health Centre (tier 2) |
+| `dr.abdi` / `dr.hanna` / `dr.bekele` | Doctor — assignment targets | Ambo General Hospital (tier 4) |
+| `dr.tigist` / `dr.lidya` / `dr.tewodros` | Doctor (OB/GYN, nephrology, oncology) | Black Lion (tier 5) |
+| `dr.yonas` | Doctor — **pending IT verification** | Black Lion |
+| `liaison.ambo` | **Referral reception** — assigns clinicians | Ambo General Hospital |
+| `liaison.blacklion` / `liaison.zewditu` / `liaison.ginchi` | Referral reception | respective hospitals |
 | `triage.ambo` | Triage nurse | Ambo General Hospital |
-| `admin.ambo` | Facility admin | Ambo General Hospital |
+| `spec.neuro` / `spec.psych` / `spec.eye` | Specialist | Black Lion / Amanuel / Menelik II |
+| `it.blacklion` / `it.ambo` / `it.stpauls` | Hospital IT administrator | respective hospitals |
+| `admin.ambo` | Facility administrator | Ambo General Hospital |
+| `hew.awaro` / `hew.gosu` / `hew.dano` | Health Extension Worker | health posts (tier 1) |
 | `woreda.ws` | Woreda health office | West Shewa |
+| `rhb.oromia` / `rhb.aa` | Regional health bureau | — |
+| `moh.referral` | Federal Ministry of Health | — |
 | `cbhi.ws` | CBHI claims officer | — |
+| `abeba.k` / `roba.d` / `getahun.m` | Patient (portal) | — |
 | `sysadmin` | System administrator | — |
 
 ### The five-minute demo
