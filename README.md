@@ -10,64 +10,64 @@ about the gaps.
 
 ---
 
-## 0. Pilot feature build (demo-day release)
+## 0. Pilot feature build
 
-The `web/` app now runs **standalone in the browser** with a simulated backend that
-enforces the same business rules as the NestJS API (state machine, BR-01/04/05/13/
-22/23/26/51, SLA escalation, real bed reservations). With no `VITE_API_BASE` set it
-seeds a realistic Ethiopian network — Tikur Anbessa (Black Lion), St. Paul's,
-Zewditu, Yekatit 12, Ghandi Memorial, ALERT, St. Peter's, Amanuel, plus the West
-Shewa chain (Ambo General → Guder/Ginchi PH → health centres → health posts) — and
-deploys to Vercel as a static site. Point `VITE_API_BASE` at the API and the
-simulation layer disappears; the request/response contract is identical.
+**→ Team onboarding: read [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) first.**
+It is the source of truth for architecture, the RBAC/visibility matrix, how to run
+everything, and the roadmap.
+
+Everything below runs against a **real PostgreSQL database** with seeded pilot data
+(19 facilities, 27 accounts, referral history, patient feedback). Nothing is
+hard-coded in the frontend.
 
 New in this build:
 
-- **Roles & facility-scoped RBAC** — `doctor` (with MoH license number), `liaison`,
+- **Roles & facility-scoped RBAC** — `doctor` (with MoH licence number), `liaison`,
   `it_admin`, `patient`. Each hospital's IT administrator registers and verifies its
-  own staff; only verified, active accounts of a facility can send or receive in
-  that facility's name (a "Black Lion referral" can only come from Black Lion staff).
+  own staff; accounts start `pending` and cannot sign in until verified, so a
+  "Black Lion referral" can only come from verified Black Lion staff.
+- **Scoped visibility** — doctors see only referrals they ordered; liaisons see
+  their own facility's queue; **detailed analytics and all patient feedback are
+  IT-administration-only and own-facility-only**, with each rating linked to the
+  referral, the ordering doctor (name + licence) and the from → to hospital pair.
 - **Patient portal + public tracker** — patients track their referral like a parcel
-  (`/track` with referral code + phone; or a portal account), read follow-up
-  instructions, and **rate both hospitals** (1–5 stars + comment) after care.
+  (`/track` with referral code + phone, or a portal account), read follow-up
+  instructions, and **rate both hospitals** after care.
 - **Attachments** — image/PDF uploads (X-ray, MRI, ultrasound, lab reports) travel
-  with the referral; the receiving doctor previews and downloads them.
+  with the referral; every download is audited and restricted to the two facilities
+  party to the referral.
 - **Sender identity** — the receiving side sees the referring doctor's name, title,
-  license number and direct phone, plus the sending facility's full address.
-- **Real availability** — liaisons update beds/capabilities with name+time stamps;
-  accepting with "reserve a bed" decrements an actual bed and lapses restore it.
-- **Override-reason utilisation** — BR-13 override reasons are aggregated into a
-  "Routing override intelligence" dashboard panel with concrete planning advice;
-  patient ratings feed routing display and analytics.
-- **Landing page + refreshed MoH-style UI.**
+  licence number and direct phone, plus the sending facility's full address.
+- **Real bed reservations** — accepting with "reserve a bed" decrements an actual
+  bed on the ward board; lapse, cancel and reroute release it.
+- **Override-reason utilisation** — BR-13 override reasons feed a "Routing override
+  intelligence" panel with concrete planning advice.
+- **Landing page + MoH-style UI refresh.**
 
-Documentation added under `docs/`:
+Documentation under `docs/`:
 
 | Document | Audience |
 |---|---|
+| `docs/PROJECT_STATE.md` | **Engineers — start here.** Architecture, RBAC matrix, how to run, roadmap |
 | `docs/USER_GUIDE.md` | Non-technical guide for every role (doctor, liaison, IT, patient, bureau) |
-| `docs/AI_INTEGRATION.md` | AI integration blueprint: 7 use cases, gateway architecture, 8-stage implementation workflow, Ethiopia-specific governance |
+| `docs/AI_INTEGRATION.md` | AI integration blueprint: 7 use cases, gateway architecture, 8-stage workflow |
 | `docs/UI_DESIGN_PROMPT.md` | Ready-to-paste prompts for Stitch / Figma AI, per screen |
 
-### Run the demo locally
+### Tests
+
+With the API running:
 
 ```bash
-cd web && npm install && npm run dev    # no database, no server needed
+cd server
+node scripts/e2e-test.js       # 71 checks — lifecycle and business rules
+node scripts/e2e-features.js   # 48 checks — roles, portal, feedback, RBAC
 ```
 
-### Deploy to Vercel
+### Static showcase build (optional)
 
-```bash
-cd web
-npx vercel deploy --prod                # vercel.json already configures SPA rewrites
-```
-
-Demo sign-ins (password `Password123!` for all): `dr.kebede` (doctor, Ambo HC),
-`liaison.ambo`, `liaison.blacklion`, `it.blacklion` (IT admin), `abeba.k`
-(patient), `woreda.ws` (health office), and `dr.yonas` — a pending doctor to
-demonstrate IT verification. Public patient tracking: code `ERL-K7PM-42`, phone
-`0912000001`. Data resets per browser via `localStorage` (bump `SEED_VERSION`
-in `web/src/demo/data.js` to force a reseed).
+`VITE_DEMO=1 npm run build` in `web/` produces a self-contained browser build with
+synthetic data — used for demonstrations without a server (Vercel-ready via
+`vercel.json`). The default build talks to the real API.
 
 ---
 
@@ -80,13 +80,13 @@ in `web/src/demo/data.js` to force a reseed).
 ### Option A — Postgres in Docker (recommended)
 
 ```bash
-docker compose up -d db          # Postgres + PostGIS on :5432, Adminer on :8080
+docker compose up -d db          # Postgres + PostGIS on :5433, Adminer on :8080
 
 cd server
-cp .env.example .env
+cp .env.example .env             # PGPORT=5433 for the Docker database
 npm install
-npm run migrate                  # applies db/migrations/*.sql
-npm run seed                     # loads the pilot zone + users
+npm run migrate                  # applies db/migrations/*.sql (tracked, re-runnable)
+node scripts/seed.js --force     # loads the pilot network (TRUNCATES first)
 npm run build
 npm start                        # API on http://localhost:3000
 ```
@@ -99,7 +99,8 @@ npm install
 npm run dev                      # UI on http://localhost:5173
 ```
 
-Open <http://localhost:5173> and sign in as `hew.awaro` / `Password123!`.
+Open <http://localhost:5173> and sign in as `dr.abdi` / `Password123!`
+(or any account in §2 — the login page lists them).
 
 ### Option B — local Postgres
 
@@ -120,27 +121,38 @@ With the API running:
 
 ```bash
 cd server
-npm run test:e2e
+npm run test:e2e               # 71 checks — lifecycle and business rules
+node scripts/e2e-features.js   # 48 checks — roles, portal, feedback, RBAC
 ```
 
-Expected: `71 passed, 0 failed`. It walks the whole lifecycle — offline creation,
-capability-aware routing, SLA escalation, decline, reroute, redirect chains, arrival
-confirmation, outcome return, loop closure, CBHI token verification, audit-chain
-integrity and idempotent offline replay.
+Expected: `71 passed, 0 failed` and `48 passed, 0 failed`. Together they walk the
+whole lifecycle — offline creation, capability-aware routing, SLA escalation,
+decline, reroute, redirect chains, arrival confirmation, outcome return, loop
+closure, CBHI tokens, audit-chain integrity, idempotent replay — plus account
+verification, attachments, real bed reservations, the patient portal, and every
+feedback/analytics visibility rule.
 
 ---
 
 ## 2. Demo accounts
 
-All passwords are `Password123!`.
+All passwords are `Password123!`. Full list and the visibility matrix:
+[`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) §5–6.
 
 | Username | Role | Facility |
 |---|---|---|
+| `dr.abdi` | Doctor (Medical Director) | Ambo General Hospital (tier 4) |
+| `dr.samuel` | Doctor (Internist) | Zewditu Memorial |
+| `dr.tigist` | Doctor (OB/GYN) | Black Lion |
+| `dr.yonas` | Doctor — **pending verification** | Black Lion |
+| `it.blacklion` / `it.ambo` / `it.stpauls` | Hospital IT administrator | respective hospitals |
+| `abeba.k` / `roba.d` | Patient (portal) | — |
 | `hew.awaro` | Health Extension Worker | Awaro Health Post (tier 1) |
 | `hew.gosu` | Health Extension Worker | Gosu Kora Health Post |
 | `clin.ambohc` | Clinician | Ambo Health Centre (tier 2) |
 | `clin.guderhc` | Clinician | Guder Health Centre |
 | `liaison.ambo` | Referral liaison | Ambo General Hospital (tier 4) |
+| `liaison.blacklion` / `liaison.stpauls` / `liaison.zewditu` / `liaison.y12` | Referral liaison | Addis hospitals |
 | `liaison.guder` | Referral liaison | Guder Primary Hospital (tier 3) |
 | `liaison.ginchi` | Referral liaison | Ginchi Primary Hospital (tier 3) |
 | `triage.ambo` | Triage nurse | Ambo General Hospital |

@@ -16,6 +16,11 @@ export interface CurrentUser {
   facilityName?: string;
   facilityTier?: number;
   phone?: string;
+  title?: string | null;
+  department?: string | null;
+  licenseNumber?: string | null;
+  /** Set only for role 'patient': the patient row this account belongs to. */
+  patientId?: string | null;
 }
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-secret-change-me';
@@ -59,6 +64,7 @@ export class AuthGuard implements CanActivate {
 
     const row = await this.db.one(
       `SELECT u.id, u.username, u.full_name, u.role, u.facility_id, u.phone, u.status,
+              u.title, u.department, u.license_number, u.patient_id,
               f.name_lat AS facility_name, f.tier AS facility_tier
          FROM app_user u LEFT JOIN facility f ON f.id = u.facility_id
         WHERE u.id = $1`,
@@ -75,6 +81,10 @@ export class AuthGuard implements CanActivate {
       facilityName: row.facility_name,
       facilityTier: row.facility_tier,
       phone: row.phone,
+      title: row.title,
+      department: row.department,
+      licenseNumber: row.license_number,
+      patientId: row.patient_id,
     } as CurrentUser;
 
     const required = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
@@ -101,7 +111,7 @@ export class AuthService {
         WHERE u.username = $1`,
       [username],
     );
-    if (!u || u.status !== 'active') throw new UnauthorizedException('Invalid credentials');
+    if (!u) throw new UnauthorizedException('Invalid credentials');
 
     const ok = await bcrypt.compare(password, u.password_hash);
     if (!ok) {
@@ -109,6 +119,19 @@ export class AuthService {
         actorUserId: u.id, action: 'login_failed', resourceType: 'app_user', resourceId: u.id,
       });
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Verification gate: an account acts in a facility's name only after that
+    // facility's own IT administrator has verified it.
+    if (u.status === 'pending') {
+      throw new ForbiddenException(
+        "Your account is awaiting verification by your facility's IT administrator",
+      );
+    }
+    if (u.status !== 'active') {
+      throw new ForbiddenException(
+        'Your account has been deactivated. Contact your facility IT administrator.',
+      );
     }
 
     await this.audit.record({
@@ -128,6 +151,8 @@ export class AuthService {
         id: u.id, username: u.username, fullName: u.full_name, role: u.role,
         facilityId: u.facility_id, facilityName: u.facility_name,
         facilityTier: u.facility_tier, phone: u.phone,
+        title: u.title, department: u.department,
+        licenseNumber: u.license_number, patientId: u.patient_id,
       },
     };
   }

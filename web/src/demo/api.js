@@ -217,7 +217,6 @@ function suggest(body, user) {
       const accepted = decided.filter((r) => r.decision === 'accepted');
       const acceptanceRate = decided.length ? accepted.length / decided.length : 0.5;
       const queueDepth = s.referrals.filter((r) => r.targetFacilityId === f.id && SLA_ACTIVE_STATES.includes(r.status)).length;
-      const rating = facilityRating(f.id);
 
       const score =
         w.distance * (1 / (1 + distanceKm / 25)) +
@@ -234,7 +233,8 @@ function suggest(body, user) {
         bedsFree, bedsReportedAt: cap?.reportedAt || null, bedsStale,
         acceptanceRate: Math.round(acceptanceRate * 100) / 100,
         queueDepth, is24h: f.is24h, hasAmbulance: f.hasAmbulance,
-        patientRating: rating.avg, patientRatingCount: rating.count,
+        // Patient feedback is intentionally NOT exposed to clinicians here —
+        // it mirrors the server rule (IT/quality administration only).
         score: Math.round(score * 1000) / 1000,
         eligible: missing.length === 0,
         missingCapabilities: missing, staleCapabilities: stale,
@@ -326,7 +326,15 @@ function hydrate(r, user) {
     actorSide: side,
     slaRemainingMinutes: r.slaDeadlineAt && SLA_ACTIVE_STATES.includes(r.status)
       ? Math.round((new Date(r.slaDeadlineAt).getTime() - Date.now()) / 60000) : null,
-    feedback,
+    // Feedback follows the server rule: patients see their own; the facility's
+    // IT administrator sees rows about their facility; clinicians see none.
+    ...(user.role === 'patient'
+      ? { feedback }
+      : user.role === 'it_admin'
+          && (r.originFacilityId === user.facilityId || r.targetFacilityId === user.facilityId)
+        ? { feedback: feedback.filter((f) => f.facilityId === user.facilityId)
+              .map((f) => ({ ...f, facility_role: f.facilityRole })) }
+        : {}),
     feedbackEligible: !!r.arrivedAt || isTerminal(r.status),
   };
 
@@ -640,18 +648,6 @@ function metrics(scope) {
   }).sort((a, b) => a - b);
   const median = (arr) => (arr.length ? arr[Math.floor(arr.length / 2)] : null);
 
-  const ratings = {};
-  s.feedback.forEach((f) => {
-    const key = f.facilityId;
-    ratings[key] = ratings[key] || { sum: 0, n: 0 };
-    ratings[key].sum += f.rating; ratings[key].n += 1;
-  });
-  const facilityRatings = Object.entries(ratings).map(([facilityId, v]) => ({
-    facilityId, facilityName: facility(facilityId)?.name,
-    avgRating: Math.round((v.sum / v.n) * 10) / 10, count: v.n,
-  })).sort((a, b) => b.avgRating - a.avgRating);
-  const allRatings = s.feedback.map((f) => f.rating);
-
   return {
     totals: {
       totalReferrals: rows.length,
@@ -679,14 +675,6 @@ function metrics(scope) {
       overridden: overridden.length,
       overrideRatePct: pct(overridden.length, ranked.length),
       reasons: Object.entries(overrideCounts).map(([override_reason, n]) => ({ override_reason, n })).sort((a, b) => b.n - a.n),
-    },
-    patientExperience: {
-      avgRating: allRatings.length ? Math.round((allRatings.reduce((a, b) => a + b, 0) / allRatings.length) * 10) / 10 : null,
-      totalRatings: allRatings.length,
-      facilityRatings,
-      recentComments: s.feedback.slice(-6).reverse().map((f) => ({
-        facilityName: facility(f.facilityId)?.name, rating: f.rating, comment: f.comment, createdAt: f.createdAt,
-      })),
     },
     byStatus: Object.entries(rows.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {}))
       .map(([status, n]) => ({ status, n })).sort((a, b) => b.n - a.n),
@@ -966,11 +954,30 @@ export async function demoApi(method, path, body) {
     save();
     return { ok: true, feedback: results };
   }
-  const mFb = p.match(/^\/v1\/feedback\/facility\/([^/]+)$/);
-  if (method === 'GET' && mFb) {
+  /* IT/quality administration only, and only their OWN facility. */
+  if (method === 'GET' && p === '/v1/feedback/my-facility') {
+    if (!['it_admin', 'sysadmin'].includes(user.role)) {
+      err(403, 'Patient feedback is visible to IT/quality administration only');
+    }
+    const rows = s.feedback.filter((f) => f.facilityId === user.facilityId);
+    const rating = facilityRating(user.facilityId);
     return {
-      ...facilityRating(mFb[1]),
-      items: s.feedback.filter((f) => f.facilityId === mFb[1]).slice(-20).reverse(),
+      facilityId: user.facilityId,
+      avgRating: rating.avg, count: rating.count,
+      lowRatings: rows.filter((f) => f.rating <= 2).length,
+      items: rows.slice().reverse().map((f) => {
+        const r = s.referrals.find((x) => x.id === f.referralId);
+        return {
+          id: f.id, rating: f.rating, comment: f.comment,
+          facilityRole: f.facilityRole, createdAt: f.createdAt,
+          referralCode: r?.code, reasonCode: r?.reasonCode,
+          urgency: r?.urgency, referralStatus: r?.status,
+          fromFacility: facility(r?.originFacilityId)?.name,
+          toFacility: facility(r?.targetFacilityId)?.name,
+          referringDoctor: r?.referringUserName,
+          referringDoctorLicense: r?.referringUserLicense,
+        };
+      }),
     };
   }
 
@@ -1036,10 +1043,64 @@ export async function demoApi(method, path, body) {
     return s.notifications.slice(-30).reverse();
   }
 
-  /* ---------- analytics ---------- */
-  if (method === 'GET' && p === '/v1/analytics/overview') return metrics(q);
+  /* ---------- analytics: one route, a different depth per role ---------- */
+  if (method === 'GET' && p === '/v1/analytics/overview') {
+    if (['woreda', 'region', 'moh', 'sysadmin'].includes(user.role)) {
+      return { scope: 'network_flow', ...metrics(q) };
+    }
+    if (user.role === 'it_admin') {
+      return { scope: 'it_facility_detail', facilityName: user.facilityName, ...metrics({ facilityId: user.facilityId }) };
+    }
+    if (['liaison', 'triage', 'facility_admin'].includes(user.role)) {
+      const own = (pred) => s.referrals.filter(pred).length;
+      return {
+        scope: 'facility_operations',
+        viewer: { name: user.fullName, role: user.role, facilityName: user.facilityName },
+        queue: {
+          inboundAwaitingDecision: own((r) => r.targetFacilityId === user.facilityId && ['SUBMITTED', 'ESCALATED'].includes(r.status)),
+          inboundEscalated: own((r) => r.targetFacilityId === user.facilityId && r.status === 'ESCALATED'),
+          acceptedAwaitingArrival: own((r) => r.targetFacilityId === user.facilityId && r.status === 'ACCEPTED'),
+          inTransit: own((r) => r.targetFacilityId === user.facilityId && r.status === 'IN_TRANSIT'),
+          outcomesDue: own((r) => r.targetFacilityId === user.facilityId && ['ARRIVED', 'IN_CARE'].includes(r.status) && !r.outcomeSubmittedAt),
+          bedsReserved: own((r) => r.targetFacilityId === user.facilityId && r.bedReserved),
+          outboundAwaiting: own((r) => r.originFacilityId === user.facilityId && SLA_ACTIVE_STATES.includes(r.status)),
+          outboundToAcknowledge: own((r) => r.originFacilityId === user.facilityId && r.outcomeSubmittedAt && !r.outcomeAcknowledgedAt),
+        },
+        capacity: s.capacity.filter((c) => c.facilityId === user.facilityId).map((c) => ({
+          ward_type: c.wardType, beds_total: c.bedsTotal, beds_free: c.bedsFree, reported_at: c.reportedAt,
+        })),
+      };
+    }
+    if (['doctor', 'clinician', 'specialist', 'hew'].includes(user.role)) {
+      const mine = s.referrals.filter((r) => r.referringUserId === user.id);
+      const terminal = mine.filter((r) => isTerminal(r.status) && r.status !== 'CLOSED_CANCELLED');
+      const closed = mine.filter((r) => r.status === 'CLOSED_COMPLETED');
+      return {
+        scope: 'my_referrals',
+        viewer: { name: user.fullName, role: user.role, facilityName: user.facilityName },
+        totals: {
+          sent: mine.length,
+          loopsClosed: closed.length,
+          emergencies: mine.filter((r) => r.urgency === 'emergency').length,
+          awaitingResponse: mine.filter((r) => SLA_ACTIVE_STATES.includes(r.status)).length,
+          awaitingReroute: mine.filter((r) => r.status === 'DECLINED').length,
+          outcomesToAcknowledge: mine.filter((r) => r.outcomeSubmittedAt && !r.outcomeAcknowledgedAt).length,
+        },
+        myLoopClosureRatePct: terminal.length ? Math.round((closed.length / terminal.length) * 1000) / 10 : null,
+        byStatus: Object.entries(mine.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {}))
+          .map(([status, n]) => ({ status, n })).sort((a, b) => b.n - a.n),
+      };
+    }
+    err(403, `Role '${user.role}' has no analytics view`);
+  }
   const mAn = p.match(/^\/v1\/analytics\/facility\/([^/]+)$/);
-  if (method === 'GET' && mAn) return metrics({ facilityId: mAn[1] });
+  if (method === 'GET' && mAn) {
+    const own = user.facilityId === mAn[1];
+    if (!['woreda', 'region', 'moh', 'sysadmin'].includes(user.role) && !(own && ['it_admin', 'facility_admin'].includes(user.role))) {
+      err(403, "Detailed facility analytics are limited to oversight and the facility's own IT administration");
+    }
+    return metrics({ facilityId: mAn[1] });
+  }
 
   err(404, `Demo API: no route for ${method} ${p}`);
 }

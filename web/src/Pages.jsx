@@ -148,9 +148,12 @@ export function ReferralDetail() {
 
   async function addAttachment(att) {
     setBusy(true); setError(null);
-    try { setR(await post(`/v1/referrals/${id}/attachments`, att)); }
+    try { await post(`/v1/referrals/${id}/attachments`, att); load(); }
     catch (e) { setError(e); } finally { setBusy(false); }
   }
+
+  /** Content is fetched on demand — every read is audited server-side. */
+  const openAttachment = (a) => get(`/v1/referrals/${id}/attachments/${a.id}`);
 
   if (!r) return <Spinner />;
   const can = (e) => (r.allowedEvents || []).includes(e);
@@ -242,7 +245,7 @@ export function ReferralDetail() {
       {!r.clinicalRedacted && (
         <Card title="Imaging & documents"
               subtitle="X-ray, MRI, ultrasound, lab reports — travel with the referral so nothing is repeated">
-          <AttachmentList attachments={r.attachments} />
+          <AttachmentList attachments={r.attachments} onOpen={openAttachment} />
           {isParty && !r.status.startsWith('CLOSED_') && (
             <div className={r.attachments?.length ? 'mt-3' : ''}>
               <FileUpload onAdd={addAttachment} disabled={busy} />
@@ -297,16 +300,18 @@ export function ReferralDetail() {
         </Card>
       )}
 
-      {/* patient ratings, once given */}
+      {/* Patient feedback is deliberately NOT rendered for clinical roles.
+          The server only returns it to the facility's IT administrator, who
+          sees it on their dashboard — see docs/PROJECT_STATE.md § visibility. */}
       {r.feedback?.length > 0 && (
-        <Card title="Patient feedback" subtitle="Collected in the patient portal after the loop closes">
+        <Card title="Patient feedback (IT/quality view)"
+              subtitle="Shown because you are administering this facility">
           <div className="space-y-2">
             {r.feedback.map((fb) => (
               <div key={fb.id} className="flex items-start justify-between gap-3 rounded-lg bg-slate-50 p-3">
                 <div>
                   <p className="text-sm font-medium text-slate-800">
-                    {fb.facilityRole === 'origin' ? r.origin_facility_name : r.target_facility_name}
-                    <span className="ml-2 text-xs text-slate-500">({fb.facilityRole === 'origin' ? 'referring' : 'receiving'})</span>
+                    Rated us as the {fb.facility_role === 'origin' ? 'referring' : 'receiving'} hospital
                   </p>
                   {fb.comment && <p className="text-sm text-slate-600">“{fb.comment}”</p>}
                 </div>
@@ -452,29 +457,141 @@ export function ReferralDetail() {
 }
 
 /* ========================================================= DASHBOARD */
+/**
+ * One route, three depths of view — the server decides which, this component
+ * renders what it is given:
+ *   my_referrals        → a clinician's own work only
+ *   facility_operations → a liaison's own queue and beds
+ *   it_facility_detail / network_flow → full analytics (IT for their own
+ *                         hospital; health bureaus for the network)
+ */
 export function Dashboard() {
-  const user = useAuth((s) => s.user);
   const [m, setM] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const path = ['woreda', 'region', 'moh', 'sysadmin'].includes(user?.role)
-      ? '/v1/analytics/overview' : `/v1/analytics/facility/${user.facilityId}`;
-    get(path).then(setM).catch(setError);
-  }, [user]);
+  useEffect(() => { get('/v1/analytics/overview').then(setM).catch(setError); }, []);
 
   if (error) return <div className="p-4"><ErrorBox error={error} /></div>;
   if (!m) return <Spinner />;
+  if (m.scope === 'my_referrals') return <MyWorkDashboard m={m} />;
+  if (m.scope === 'facility_operations') return <FacilityOpsDashboard m={m} />;
+  return <AnalyticsDashboard m={m} />;
+}
 
+/* --------- clinician: only their own referrals, no feedback, no ratings */
+function MyWorkDashboard({ m }) {
+  const t = m.totals;
+  return (
+    <div className="mx-auto max-w-4xl space-y-4 p-4">
+      <div>
+        <h1 className="text-xl font-bold">My referrals</h1>
+        <p className="text-sm text-slate-500">
+          {m.viewer.name} · {m.viewer.facilityName} — your own referral activity.
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">My loop-closure rate</p>
+        <p className={`mt-1 text-4xl font-bold ${m.myLoopClosureRatePct >= 60 ? 'text-emerald-600' : 'text-slate-900'}`}>
+          {m.myLoopClosureRatePct === null ? '—' : `${m.myLoopClosureRatePct}%`}
+        </p>
+        <p className="mt-1 text-sm text-slate-500">
+          {t.loopsClosed} of your closed referrals came back with an acknowledged outcome.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat label="Referrals sent" value={t.sent} sub={`${t.emergencies} emergency`} />
+        <Stat label="Awaiting response" value={t.awaitingResponse}
+              tone={t.awaitingResponse > 0 ? 'text-blue-600' : 'text-slate-900'} />
+        <Stat label="Declined — need reroute" value={t.awaitingReroute}
+              tone={t.awaitingReroute > 0 ? 'text-red-600' : 'text-slate-900'} />
+        <Stat label="Outcomes to acknowledge" value={t.outcomesToAcknowledge}
+              tone={t.outcomesToAcknowledge > 0 ? 'text-amber-600' : 'text-slate-900'}
+              sub="acknowledging closes the loop" />
+        <Stat label="Loops closed" value={t.loopsClosed} tone="text-emerald-600" />
+      </div>
+
+      <Card title="My referrals by status">
+        <div className="flex flex-wrap gap-2">
+          {m.byStatus.length === 0 ? <Empty>No referrals yet.</Empty> : m.byStatus.map((s) => (
+            <Badge key={s.status} className="bg-slate-100 text-slate-700 ring-slate-300">
+              {humanStatus(s.status)}: {s.n}
+            </Badge>
+          ))}
+        </div>
+      </Card>
+
+      <p className="text-xs text-slate-400">
+        Facility-wide analytics and patient feedback are handled by your hospital's
+        IT/quality administrator — this view stays limited to your own work.
+      </p>
+    </div>
+  );
+}
+
+/* --------- liaison / triage: their own facility's live queue and beds */
+function FacilityOpsDashboard({ m }) {
+  const q = m.queue;
+  return (
+    <div className="mx-auto max-w-4xl space-y-4 p-4">
+      <div>
+        <h1 className="text-xl font-bold">Facility operations</h1>
+        <p className="text-sm text-slate-500">{m.viewer.facilityName} — your live referral workload.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Inbound awaiting decision" value={q.inboundAwaitingDecision}
+              tone={q.inboundAwaitingDecision > 0 ? 'text-blue-600' : 'text-slate-900'} />
+        <Stat label="Escalated (SLA breached)" value={q.inboundEscalated}
+              tone={q.inboundEscalated > 0 ? 'text-red-600' : 'text-slate-900'} />
+        <Stat label="Accepted, awaiting arrival" value={q.acceptedAwaitingArrival} />
+        <Stat label="In transit to us" value={q.inTransit} />
+        <Stat label="Outcomes due" value={q.outcomesDue}
+              tone={q.outcomesDue > 0 ? 'text-amber-600' : 'text-slate-900'} />
+        <Stat label="Beds reserved" value={q.bedsReserved} sub="held off the board" />
+        <Stat label="Our outbound awaiting" value={q.outboundAwaiting} />
+        <Stat label="Outcomes to acknowledge" value={q.outboundToAcknowledge}
+              tone={q.outboundToAcknowledge > 0 ? 'text-amber-600' : 'text-slate-900'} />
+      </div>
+
+      <Card title="Bed availability" subtitle="Update these on the Availability tab — routing uses exactly this data">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {m.capacity.length === 0 ? <Empty>No wards reported.</Empty> : m.capacity.map((c) => (
+            <div key={c.ward_type} className="rounded-lg bg-slate-50 p-3">
+              <p className="text-xs uppercase text-slate-500">{humanCode(c.ward_type)}</p>
+              <p className="text-lg font-bold">{c.beds_free}<span className="text-sm font-normal text-slate-500">/{c.beds_total}</span></p>
+              <p className="text-xs text-slate-500">{timeAgo(c.reported_at)}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <p className="text-xs text-slate-400">
+        Network-wide analytics and patient feedback are not part of this view.
+      </p>
+    </div>
+  );
+}
+
+/* --------- IT admin (own facility) and health bureaus (network flow) */
+function AnalyticsDashboard({ m }) {
   const closure = m.loopClosureRatePct;
   const tone = closure === null ? 'text-slate-400'
     : closure >= 60 ? 'text-emerald-600' : closure >= 30 ? 'text-amber-600' : 'text-red-600';
   const oi = m.overrideInsights;
-  const px = m.patientExperience;
+  const isIT = m.scope === 'it_facility_detail';
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
-      <h1 className="text-xl font-bold">Dashboard</h1>
+      <div>
+        <h1 className="text-xl font-bold">{isIT ? 'Facility analytics' : 'Network dashboard'}</h1>
+        <p className="text-sm text-slate-500">
+          {isIT
+            ? `${m.facilityName} — detailed analytics and patient feedback for your hospital only.`
+            : 'Referral flow across the network. Clinical records and patient feedback are not shown here.'}
+        </p>
+      </div>
 
       <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">North star · loop-closure rate</p>
@@ -498,12 +615,11 @@ export function Dashboard() {
               target={`target ${m.benchmark.arrivalConfirmationTargetPct}%`} />
         <Stat label="Acceptance rate"
               value={m.acceptanceRatePct === null ? '—' : `${m.acceptanceRatePct}%`} />
-        <Stat label="Patient rating"
-              value={px?.avgRating ? `★ ${px.avgRating}` : '—'}
-              sub={px?.totalRatings ? `${px.totalRatings} ratings` : 'no ratings yet'}
-              tone={px?.avgRating >= 4 ? 'text-emerald-600' : 'text-slate-900'} />
-        <Stat label="With attachments" value={m.totals.withAttachments}
-              sub="imaging travels with the referral" />
+        <Stat label="Pre-referral vitals complete"
+              value={m.preReferralCompletenessPct === null ? '—' : `${m.preReferralCompletenessPct}%`}
+              target={`baseline ${m.benchmark.preReferralCompletenessBaselinePct}%`} />
+        <Stat label="Outcomes awaiting acknowledgement" value={m.totals.outcomesAwaitingAck}
+              tone={m.totals.outcomesAwaitingAck > 0 ? 'text-amber-600' : 'text-slate-900'} />
         <Stat label="SLA breaches" value={m.totals.slaBreaches}
               tone={m.totals.slaBreaches > 0 ? 'text-red-600' : 'text-slate-900'} />
         <Stat label="Overdue outcomes" value={m.totals.overdueOutcomes}
@@ -566,30 +682,7 @@ export function Dashboard() {
           )}
         </Card>
 
-        <Card title="Patient experience" subtitle="Star ratings from the patient portal, by facility">
-          {!px?.facilityRatings?.length ? <Empty>No ratings yet.</Empty> : (
-            <>
-              <ul className="space-y-1.5">
-                {px.facilityRatings.slice(0, 6).map((fr) => (
-                  <li key={fr.facilityId} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate text-slate-700">{fr.facilityName}</span>
-                    <Stars value={fr.avgRating} count={fr.count} />
-                  </li>
-                ))}
-              </ul>
-              {px.recentComments?.length > 0 && (
-                <div className="mt-3 space-y-1 border-t border-slate-100 pt-2">
-                  {px.recentComments.slice(0, 3).map((c, i) => (
-                    <p key={i} className="text-xs text-slate-500">
-                      <span className="text-amber-500">{'★'.repeat(c.rating)}</span>{' '}
-                      “{c.comment}” — <span className="text-slate-400">{c.facilityName}</span>
-                    </p>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </Card>
+        {isIT && <FacilityFeedbackPanel />}
 
         <Card title="Referral flow">
           {m.flow.length === 0 ? <Empty>No flow yet.</Empty> : (
@@ -615,6 +708,66 @@ export function Dashboard() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Patient feedback — IT administrator only, own facility only.
+ *
+ * Each rating is shown with the linkage that makes it actionable: which
+ * referral, which doctor ordered it, and between which two hospitals. Clinical
+ * staff never see this panel; it is not part of any other role's dashboard.
+ */
+function FacilityFeedbackPanel() {
+  const [fb, setFb] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => { get('/v1/feedback/my-facility').then(setFb).catch(setError); }, []);
+
+  return (
+    <Card title="Patient feedback about your hospital"
+          subtitle="Visible to IT/quality administration only — linked to the referral, the ordering doctor and the hospital pair">
+      {error ? <ErrorBox error={error} />
+        : !fb ? <Spinner />
+        : fb.count === 0 ? <Empty>No patient feedback yet.</Empty> : (
+        <>
+          <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 pb-3">
+            <Stars value={fb.avgRating} count={fb.count} size="text-base" />
+            {fb.lowRatings > 0 && (
+              <Badge className="bg-red-100 text-red-800 ring-red-600/30">
+                {fb.lowRatings} rating{fb.lowRatings > 1 ? 's' : ''} ≤ 2 ★ — review
+              </Badge>
+            )}
+          </div>
+          <ul className="mt-3 space-y-3">
+            {fb.items.slice(0, 8).map((i) => (
+              <li key={i.id} className="rounded-lg bg-slate-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800">
+                      {i.fromFacility} → {i.toFacility}
+                      <span className="ml-2 text-xs font-normal text-slate-500">
+                        (rated us as the {i.facilityRole === 'origin' ? 'referring' : 'receiving'} hospital)
+                      </span>
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      <span className="font-mono">{i.referralCode}</span>
+                      {i.referringDoctor && <> · ordered by {i.referringDoctor}</>}
+                      {i.referringDoctorLicense && <> ({i.referringDoctorLicense})</>}
+                      {i.reasonCode && <> · {humanCode(i.reasonCode)}</>}
+                    </p>
+                    {i.comment && <p className="mt-1 text-sm text-slate-700">“{i.comment}”</p>}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <Stars value={i.rating} showValue={false} />
+                    <p className="mt-0.5 text-xs text-slate-400">{timeAgo(i.createdAt)}</p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -688,8 +841,7 @@ export function AvailabilityAdmin() {
       </div>
       <ErrorBox error={error} onDismiss={() => setError(null)} />
 
-      <Card title="Beds" subtitle="Reservations from accepted referrals decrement these live"
-            actions={f.rating?.avg != null && <Stars value={f.rating.avg} count={f.rating.count} />}>
+      <Card title="Beds" subtitle="Reservations from accepted referrals decrement these live">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {f.capacity.map((c) => (
             <button key={c.ward_type} onClick={() => setBedEdit({ wardType: c.ward_type, bedsFree: c.beds_free, bedsTotal: c.beds_total })}
@@ -699,7 +851,6 @@ export function AvailabilityAdmin() {
               <p className={`text-xs ${c.stale ? 'text-amber-700' : 'text-slate-500'}`}>
                 {timeAgo(c.reported_at)}{c.stale && ' · stale'}
               </p>
-              <p className="truncate text-[10px] text-slate-400">by {c.reported_by}</p>
             </button>
           ))}
         </div>

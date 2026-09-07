@@ -121,7 +121,9 @@ export default function ITAdmin() {
                   </p>
                   <p className="text-xs text-slate-500">
                     {u.licenseNumber && <>License <span className="font-mono">{u.licenseNumber}</span> · </>}
-                    {u.verifiedAt ? `verified ${timeAgo(u.verifiedAt)} by ${u.verifiedBy}` : 'not verified'}
+                    {u.verifiedAt
+                      ? `verified ${timeAgo(u.verifiedAt)}${u.verifiedByName ? ` by ${u.verifiedByName}` : ''}`
+                      : 'not verified'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

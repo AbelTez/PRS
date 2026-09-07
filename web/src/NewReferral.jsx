@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { get, post, ApiError, useAuth, humanCode } from './lib';
 import {
   Button, Card, Field, Input, Select, Textarea, ErrorBox, Badge,
-  UrgencyBadge, Spinner, inputCls, FileUpload, AttachmentList, Stars,
+  UrgencyBadge, Spinner, inputCls, FileUpload, AttachmentList,
 } from './ui';
 
 const STEPS = ['Patient', 'Clinical', 'Destination', 'Confirm'];
@@ -377,18 +377,17 @@ export default function NewReferral() {
                       {c.bedsStale && <p className="text-xs text-amber-700">reported &gt;8 h ago</p>}
                     </div>
                   </div>
+                  {/* Operational signals only. Patient feedback is not shown to
+                      clinicians — it belongs to each hospital's IT/quality view. */}
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                     <span>{Math.round(c.acceptanceRate * 100)}% acceptance</span>
                     <span>· {c.queueDepth} waiting</span>
-                    {c.patientRating != null && <span className="inline-flex items-center gap-1">· <Stars value={c.patientRating} count={c.patientRatingCount} size="text-xs" /></span>}
                     {c.is24h && <span>· 24 h</span>}
                     {c.hasAmbulance && <span>· ambulance</span>}
                     {c.staleCapabilities.length > 0 &&
                       <span className="text-amber-700">· {c.staleCapabilities.length} capability check overdue</span>}
                   </div>
-                  {(c.zone || c.region) && (
-                    <p className="mt-1 text-xs text-slate-400">{[c.address, c.zone, c.region].filter(Boolean).join(', ')}{c.phone && ` · ${c.phone}`}</p>
-                  )}
+                  {c.phone && <p className="mt-1 text-xs text-slate-400">{c.phone}</p>}
                 </button>
               ))}
             </div>

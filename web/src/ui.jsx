@@ -218,21 +218,45 @@ export function FileUpload({ onAdd, disabled }) {
   );
 }
 
-export function AttachmentList({ attachments, onRemove, compact }) {
+/**
+ * Attachment gallery.
+ *
+ * The list carries metadata only; file content is fetched on demand through
+ * `onOpen(attachment)` (the API audits every read). Items that already carry a
+ * `dataUrl` — e.g. files staged in the referral wizard before upload — render
+ * their thumbnail directly.
+ */
+export function AttachmentList({ attachments, onRemove, onOpen, compact }) {
   const [preview, setPreview] = React.useState(null);
+  const [loading, setLoading] = React.useState(null);
   if (!attachments?.length) return null;
+
+  async function open(a) {
+    if (a.dataUrl) { setPreview(a); return; }
+    if (!onOpen) return;
+    setLoading(a.id);
+    try { setPreview(await onOpen(a)); }
+    finally { setLoading(null); }
+  }
+
   return (
     <>
       <ul className={`grid gap-2 ${compact ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
         {attachments.map((a, i) => (
           <li key={a.id || i} className="group relative overflow-hidden rounded-lg ring-1 ring-slate-200">
-            <button type="button" onClick={() => a.dataUrl && setPreview(a)} className="block w-full text-left">
+            <button type="button" onClick={() => open(a)} className="block w-full text-left">
               {a.dataUrl && a.type?.startsWith('image/') ? (
                 <img src={a.dataUrl} alt={a.name} className="h-24 w-full bg-slate-900 object-cover" />
               ) : (
                 <div className="flex h-24 w-full flex-col items-center justify-center bg-slate-100 text-slate-500">
-                  <span className="text-2xl" aria-hidden>{a.type === 'application/pdf' ? '📄' : '🗂️'}</span>
-                  <span className="text-xs">{a.evicted ? 'evicted (demo quota)' : a.type === 'application/pdf' ? 'PDF document' : 'file'}</span>
+                  <span className="text-2xl" aria-hidden>
+                    {loading === a.id ? '⏳' : a.type === 'application/pdf' ? '📄' : a.type?.startsWith('image/') ? '🖼️' : '🗂️'}
+                  </span>
+                  <span className="text-xs">
+                    {loading === a.id ? 'opening…'
+                      : a.type === 'application/pdf' ? 'PDF document'
+                      : a.type?.startsWith('image/') ? 'image — tap to view' : 'file'}
+                  </span>
                 </div>
               )}
               <div className="truncate bg-white px-2 py-1 text-xs text-slate-600">{a.name}</div>

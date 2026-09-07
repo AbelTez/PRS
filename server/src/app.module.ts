@@ -6,6 +6,9 @@ import { AuthModule, AuthGuard } from './auth/auth.module';
 import { RoutingModule } from './routing/routing.module';
 import { ReferralModule } from './referral/referral.module';
 import { FeatureModule } from './modules';
+import { UsersModule } from './users/users.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { PortalModule } from './portal/portal.module';
 
 @Module({
   imports: [
@@ -15,6 +18,9 @@ import { FeatureModule } from './modules';
     RoutingModule,
     ReferralModule,
     FeatureModule,
+    UsersModule,
+    FeedbackModule,
+    PortalModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

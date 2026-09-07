@@ -383,18 +383,160 @@ export class AnalyticsService {
   }
 }
 
+/* ---------------------------------------------- role-aware analytics views */
+/**
+ * Visibility policy (deliberate, until dedicated quality roles exist):
+ *  - oversight (woreda/region/moh/sysadmin): network flow metrics — no feedback;
+ *  - it_admin: DETAILED analytics for THEIR OWN facility only, including
+ *    patient feedback linked to the ordering doctor and the from/to hospitals;
+ *  - every other facility role (doctor, hew, liaison, triage, facility_admin):
+ *    only data about their own work — no feedback, no other facility's detail.
+ */
+@Injectable()
+export class ScopedAnalyticsService {
+  constructor(private db: Db) {}
+
+  /** A clinician's own referral activity — nothing about anyone else. */
+  async mine(user: CurrentUser) {
+    const [core] = await this.db.query(
+      `SELECT count(*)::int AS sent,
+              count(*) FILTER (WHERE status = 'CLOSED_COMPLETED')::int AS loops_closed,
+              count(*) FILTER (WHERE status LIKE 'CLOSED_%' AND status <> 'CLOSED_CANCELLED')::int AS terminal,
+              count(*) FILTER (WHERE urgency = 'emergency')::int AS emergencies,
+              count(*) FILTER (WHERE decision = 'declined' AND status = 'DECLINED')::int AS awaiting_reroute,
+              count(*) FILTER (WHERE outcome_submitted_at IS NOT NULL AND outcome_acknowledged_at IS NULL)::int AS outcomes_to_acknowledge,
+              count(*) FILTER (WHERE status IN ('SUBMITTED','ESCALATED','ACKNOWLEDGED'))::int AS awaiting_response
+         FROM referral
+        WHERE referring_user_id = $1 AND is_test_data = FALSE`,
+      [user.id],
+    );
+    const byStatus = await this.db.query(
+      `SELECT status, count(*)::int AS n FROM referral
+        WHERE referring_user_id = $1 AND is_test_data = FALSE
+        GROUP BY status ORDER BY n DESC`,
+      [user.id],
+    );
+    return {
+      scope: 'my_referrals',
+      viewer: { name: user.fullName, role: user.role, facilityName: user.facilityName },
+      totals: {
+        sent: core.sent, loopsClosed: core.loops_closed, emergencies: core.emergencies,
+        awaitingResponse: core.awaiting_response, awaitingReroute: core.awaiting_reroute,
+        outcomesToAcknowledge: core.outcomes_to_acknowledge,
+      },
+      myLoopClosureRatePct: core.terminal > 0
+        ? Math.round((core.loops_closed / core.terminal) * 1000) / 10 : null,
+      byStatus,
+    };
+  }
+
+  /** A liaison's operational picture of their OWN facility's queue. */
+  async facilityOps(user: CurrentUser) {
+    const [core] = await this.db.query(
+      `SELECT
+         count(*) FILTER (WHERE target_facility_id = $1 AND status IN ('SUBMITTED','ESCALATED'))::int AS inbound_awaiting_decision,
+         count(*) FILTER (WHERE target_facility_id = $1 AND status = 'ESCALATED')::int AS inbound_escalated,
+         count(*) FILTER (WHERE target_facility_id = $1 AND status = 'ACCEPTED')::int AS accepted_awaiting_arrival,
+         count(*) FILTER (WHERE target_facility_id = $1 AND status = 'IN_TRANSIT')::int AS in_transit,
+         count(*) FILTER (WHERE target_facility_id = $1 AND status IN ('ARRIVED','IN_CARE') AND outcome_submitted_at IS NULL)::int AS outcomes_due,
+         count(*) FILTER (WHERE target_facility_id = $1 AND bed_reserved = TRUE)::int AS beds_reserved,
+         count(*) FILTER (WHERE origin_facility_id = $1 AND status IN ('SUBMITTED','ESCALATED','ACKNOWLEDGED'))::int AS outbound_awaiting,
+         count(*) FILTER (WHERE origin_facility_id = $1 AND outcome_submitted_at IS NOT NULL AND outcome_acknowledged_at IS NULL)::int AS outbound_to_acknowledge
+         FROM referral WHERE is_test_data = FALSE`,
+      [user.facilityId],
+    );
+    const capacity = await this.db.query(
+      `SELECT DISTINCT ON (ward_type) ward_type, beds_total, beds_free, reported_at
+         FROM facility_capacity WHERE facility_id = $1
+        ORDER BY ward_type, reported_at DESC`,
+      [user.facilityId],
+    );
+    return {
+      scope: 'facility_operations',
+      viewer: { name: user.fullName, role: user.role, facilityName: user.facilityName },
+      queue: {
+        inboundAwaitingDecision: core.inbound_awaiting_decision,
+        inboundEscalated: core.inbound_escalated,
+        acceptedAwaitingArrival: core.accepted_awaiting_arrival,
+        inTransit: core.in_transit,
+        outcomesDue: core.outcomes_due,
+        bedsReserved: core.beds_reserved,
+        outboundAwaiting: core.outbound_awaiting,
+        outboundToAcknowledge: core.outbound_to_acknowledge,
+      },
+      capacity,
+    };
+  }
+}
+
 @Controller('v1/analytics')
 export class AnalyticsController {
-  constructor(private svc: AnalyticsService) {}
+  constructor(
+    private svc: AnalyticsService,
+    private scoped: ScopedAnalyticsService,
+    private db: Db,
+  ) {}
+
+  private static OVERSIGHT = ['woreda', 'region', 'moh', 'sysadmin'];
 
   @Get('facility/:id')
-  facility(@Param('id') id: string, @Query() q: any) {
+  facility(@Param('id') id: string, @Query() q: any, @User() u: CurrentUser) {
+    const own = u.facilityId === id;
+    if (!AnalyticsController.OVERSIGHT.includes(u.role) && !(own && ['it_admin', 'facility_admin'].includes(u.role))) {
+      throw new ForbiddenException('Detailed facility analytics are limited to oversight and the facility\'s own IT administration');
+    }
     return this.svc.metrics({ facilityId: id, ...q });
   }
 
+  /** One endpoint, a different depth of view per role. */
   @Get('overview')
-  @Roles('woreda', 'region', 'moh', 'sysadmin', 'facility_admin', 'liaison')
-  overview(@Query() q: any) { return this.svc.metrics(q); }
+  async overview(@Query() q: any, @User() u: CurrentUser) {
+    if (AnalyticsController.OVERSIGHT.includes(u.role)) {
+      // Network flow for health bureaus — no patient feedback here.
+      const m = await this.svc.metrics(q);
+      return { scope: 'network_flow', ...m, overrideInsights: await this.overrideInsights(null) };
+    }
+    if (u.role === 'it_admin') {
+      // Full detail — but strictly the IT administrator's OWN facility.
+      const m = await this.svc.metrics({ facilityId: u.facilityId });
+      return {
+        scope: 'it_facility_detail',
+        facilityName: u.facilityName,
+        ...m,
+        overrideInsights: await this.overrideInsights(u.facilityId),
+      };
+    }
+    if (['liaison', 'triage', 'facility_admin'].includes(u.role)) return this.scoped.facilityOps(u);
+    if (['doctor', 'clinician', 'specialist', 'hew'].includes(u.role)) return this.scoped.mine(u);
+    throw new ForbiddenException(`Role '${u.role}' has no analytics view`);
+  }
+
+  /** BR-13 data put to work: aggregated routing-override reasons. */
+  private async overrideInsights(facilityId: string | null) {
+    const rows = await this.db.query(
+      `SELECT override_reason, count(*)::int AS n
+         FROM referral
+        WHERE override_reason IS NOT NULL AND is_test_data = FALSE
+          AND ($1::uuid IS NULL OR origin_facility_id = $1 OR target_facility_id = $1)
+        GROUP BY override_reason ORDER BY n DESC`,
+      [facilityId],
+    );
+    const [ranked] = await this.db.query(
+      `SELECT count(*) FILTER (WHERE suggestion_rank_of_chosen IS NOT NULL)::int AS with_suggestion,
+              count(*) FILTER (WHERE override_reason IS NOT NULL)::int AS overridden
+         FROM referral
+        WHERE is_test_data = FALSE
+          AND ($1::uuid IS NULL OR origin_facility_id = $1 OR target_facility_id = $1)`,
+      [facilityId],
+    );
+    return {
+      totalWithSuggestion: ranked.with_suggestion,
+      overridden: ranked.overridden,
+      overrideRatePct: ranked.with_suggestion > 0
+        ? Math.round((ranked.overridden / ranked.with_suggestion) * 1000) / 10 : null,
+      reasons: rows,
+    };
+  }
 }
 
 /* ======================================================================== SYNC */
@@ -453,7 +595,7 @@ export class AuditController {
 }
 
 @Module({
-  providers: [FacilityService, PatientService, AnalyticsService, SyncService],
+  providers: [FacilityService, PatientService, AnalyticsService, ScopedAnalyticsService, SyncService],
   controllers: [
     FacilityController, PatientController, AnalyticsController,
     SyncController, AuditController,

@@ -25,7 +25,8 @@ const cfg = {
     return;
   }
   if (process.argv.includes('--force')) {
-    await c.query(`TRUNCATE referral_transition, referral_attachment, notification, referral,
+    await c.query(`TRUNCATE referral_feedback, referral_transition, referral_attachment,
+                            notification, referral,
                             patient, facility_capacity, facility_capability, app_user,
                             facility, reason_code, capability, admin_unit, audit_log,
                             change_log, sync_cursor, config RESTART IDENTITY CASCADE`);

@@ -60,6 +60,11 @@ the *right* information.
 treatment summary comes back, tap **Acknowledge outcome** — that's what closes
 the loop and it matters for your facility's performance.
 
+**Your Dashboard shows your own work only** — the referrals you personally
+ordered, how many are waiting for a response, and which outcomes you still need
+to acknowledge. Hospital-wide statistics and patient feedback are handled by
+your hospital's IT/quality administrator, not shown here.
+
 **If you are the receiving doctor:** open the inbound referral and you'll see
 the complete picture — the clinical details, the attached imaging, and a
 **"Referred by" card with the sending doctor's name, title, license number,
@@ -95,6 +100,11 @@ scanner under maintenance"). Every update is stamped with your name and time.
 A stale board doesn't just mislead colleagues — the system marks your data as
 stale and sends you fewer appropriate referrals.
 
+**Your Dashboard** is your live workload: inbound waiting for a decision, how
+many have breached their response time, patients in transit to you, outcomes
+due, and your current bed board. Network-wide statistics and patient feedback
+are not part of this view.
+
 ---
 
 ## 🖥️ For Hospital IT Administrators
@@ -116,6 +126,19 @@ created by someone *you* registered and verified at Black Lion.
 You can only manage accounts of **your own facility** — never another
 hospital's. Everything you do here is recorded in the audit log.
 
+**You also hold the quality view.** Your Dashboard is the only place in the
+system where **patient feedback about your hospital** is visible — nobody else,
+not doctors, not liaisons, not other hospitals, sees it. Each rating comes with
+the linkage you need to act on it: which referral, which doctor ordered it
+(with their MoH licence), and between which two hospitals the patient moved.
+Low ratings (2 stars or fewer) are flagged so you can review them with the
+relevant department. You also get your hospital's detailed analytics —
+loop-closure rate, decline reasons, routing-override intelligence — again for
+your facility only.
+
+Treat this data as confidential quality-improvement material: it exists so the
+hospital can improve, not to single out individuals.
+
 ---
 
 ## 🧑‍🦱 For Patients
@@ -133,10 +156,12 @@ plain words.
 **To rate the hospitals:** if you have a portal account (sign in with the
 username the health worker gave you), after you've been received you can rate
 **both** hospitals — the one that referred you and the one that treated you —
-from 1 to 5 stars, with a comment if you like. Your rating is anonymous to the
-hospitals. It is not a formality: ratings appear on the health bureau's
-dashboard and even influence where future patients are routed. Speaking up
-improves care for the next family.
+from 1 to 5 stars, with a comment if you like.
+
+Your rating is **not shown to the doctors or nurses who treated you.** Only the
+IT/quality administrator of the hospital you rated can read it, and only for
+their own hospital. They use it to fix real problems — waiting times, ward
+conditions, communication. Speaking honestly improves care for the next family.
 
 **In an emergency, always call 907 for an ambulance — this website is not an
 emergency service.**
@@ -167,11 +192,11 @@ Your **Dashboard** shows flow, never private medical charts:
   suggestion, their recorded reasons cluster into actionable findings (e.g.
   "transport availability" dominating = ambulance coordination problem, not a
   hospital problem).
-- **Patient experience** — star ratings and comments by facility.
 - SLA breaches, referral flows between facilities, and status breakdowns.
 
 You see names of facilities and timings — not diagnoses. Clinical details are
-only visible to the clinicians actually caring for the patient.
+only visible to the clinicians actually caring for the patient, and individual
+patient feedback stays with each hospital's own IT/quality administrator.
 
 ---
 
@@ -192,6 +217,12 @@ changes what the health bureau funds next year.
 **Who sees the patient's medical details?** Only staff at the sending and
 receiving facilities involved in the care. Health offices see timings and
 flows. Every single view of a patient's chart is logged.
+
+**Who sees patient feedback?** Only the IT/quality administrator of the
+hospital that was rated, and only for their own hospital. Doctors, nurses,
+liaisons, other hospitals and health bureaus do not see it. (When dedicated
+quality-officer roles are added, this can widen — for now it is deliberately
+narrow.)
 
 **Is the demo data real?** The facilities are real Ethiopian institutions, but
 all patients, staff accounts, referrals and ratings in the demonstration are

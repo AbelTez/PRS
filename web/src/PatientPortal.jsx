@@ -43,8 +43,10 @@ function FacilityContact({ title, f }) {
 
 function ReferralStatusCard({ r, onRate }) {
   const [t, hint] = PATIENT_STATUS[r.status] || [humanStatus(r.status), ''];
-  const myOrigin = r.feedback?.find((f) => f.facilityRole === 'origin');
-  const myTarget = r.feedback?.find((f) => f.facilityRole === 'target');
+  // The API returns snake_case columns; the browser showcase returns camelCase.
+  const role = (f) => f.facility_role ?? f.facilityRole;
+  const myOrigin = r.feedback?.find((f) => role(f) === 'origin');
+  const myTarget = r.feedback?.find((f) => role(f) === 'target');
   const rated = myOrigin && myTarget;
 
   const steps = [
@@ -125,8 +127,9 @@ function ReferralStatusCard({ r, onRate }) {
 }
 
 function RateModal({ r, onClose, onSaved }) {
-  const [originRating, setOriginRating] = useState(r?.feedback?.find((f) => f.facilityRole === 'origin')?.rating || 0);
-  const [targetRating, setTargetRating] = useState(r?.feedback?.find((f) => f.facilityRole === 'target')?.rating || 0);
+  const roleOf = (f) => f.facility_role ?? f.facilityRole;
+  const [originRating, setOriginRating] = useState(r?.feedback?.find((f) => roleOf(f) === 'origin')?.rating || 0);
+  const [targetRating, setTargetRating] = useState(r?.feedback?.find((f) => roleOf(f) === 'target')?.rating || 0);
   const [originComment, setOriginComment] = useState('');
   const [targetComment, setTargetComment] = useState('');
   const [error, setError] = useState(null);
@@ -242,7 +245,8 @@ export function TrackReferral() {
             </Button></div>
           </form>
           <p className="mt-2 text-xs text-slate-500">
-            Demo: try code <span className="font-mono">ERL-K7PM-42</span> with phone <span className="font-mono">0912000001</span>.
+            Pilot demo: referral code <span className="font-mono">ERL-K7PM-42</span> with phone{' '}
+            <span className="font-mono">0912000001</span> (Abeba Kassahun).
           </p>
         </Card>
         <ErrorBox error={error} onDismiss={() => setError(null)} />

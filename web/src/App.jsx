@@ -130,18 +130,20 @@ function BrandMark({ light }) {
 /* ================================================================== LOGIN */
 const DEMO_ACCOUNTS = [
   { group: 'Doctors', rows: [
-    ['dr.kebede', 'Dr Kebede Tesfaye — GP, Ambo Health Centre'],
-    ['dr.tigist', 'Dr Tigist Alemu — OB/GYN, Tikur Anbessa (Black Lion)'],
+    ['dr.abdi', 'Dr Abdi Gemechu — Medical Director, Ambo General'],
     ['dr.samuel', 'Dr Samuel Worku — Internist, Zewditu Memorial'],
+    ['dr.tigist', 'Dr Tigist Alemu — OB/GYN, Black Lion'],
+    ['dr.selam', 'Dr Selam Fikre — GP, Addis Ketema Health Centre'],
   ]},
   { group: 'Liaisons (receiving desk)', rows: [
     ['liaison.ambo', 'Sr Hanna Girma — Ambo General Hospital'],
-    ['liaison.blacklion', 'Sr Selamawit Bekele — Tikur Anbessa (Black Lion)'],
+    ['liaison.blacklion', 'Sr Selamawit Bekele — Black Lion'],
     ['liaison.y12', 'Sr Marta Gebre — Yekatit 12'],
   ]},
   { group: 'IT administrators', rows: [
     ['it.blacklion', 'Natnael Tesfaye — Black Lion ICT'],
     ['it.ambo', 'Kalkidan Mengistu — Ambo General ICT'],
+    ['it.stpauls', "Eyob Alemayehu — St. Paul's ICT"],
   ]},
   { group: 'Patients', rows: [
     ['abeba.k', 'Abeba Kassahun — pre-eclampsia referral'],
@@ -149,8 +151,8 @@ const DEMO_ACCOUNTS = [
   ]},
   { group: 'Community & oversight', rows: [
     ['hew.awaro', 'Almaz Bekele — Health Extension Worker, Awaro'],
+    ['clin.ambohc', 'Dr Kebede Tesfaye — Ambo Health Centre'],
     ['woreda.ws', 'W/ro Sara Negash — West Shewa Zonal Health Dept'],
-    ['rhb.aa', 'Ato Fikru Desta — Addis Ababa Health Bureau'],
   ]},
 ];
 
@@ -164,7 +166,7 @@ function homeFor(user) {
 function Login() {
   const login = useAuth((s) => s.login);
   const nav = useNavigate();
-  const [username, setUsername] = useState('dr.kebede');
+  const [username, setUsername] = useState('dr.abdi');
   const [password, setPassword] = useState('Password123!');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -193,12 +195,13 @@ function Login() {
               your referral code and phone number.
             </p>
           </Card>
-          {DEMO_MODE && (
-            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900 ring-1 ring-amber-200">
-              Demonstration build — runs entirely in your browser with synthetic data.
-              All demo accounts use <span className="font-mono font-semibold">Password123!</span>
-            </p>
-          )}
+          <p className={`rounded-lg p-3 text-xs ring-1 ${DEMO_MODE
+            ? 'bg-amber-50 text-amber-900 ring-amber-200' : 'bg-slate-50 text-slate-600 ring-slate-200'}`}>
+            {DEMO_MODE
+              ? 'Showcase build — runs entirely in your browser with synthetic data. '
+              : 'Connected to the Ethio Referral Linkage API with the pilot database. '}
+            Demo accounts use <span className="font-mono font-semibold">Password123!</span>
+          </p>
         </div>
         <Card title="Demo accounts" subtitle="Tap to fill the username">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -219,8 +222,8 @@ function Login() {
             ))}
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Try <span className="font-mono">dr.yonas</span> — a doctor whose account is still
-            <span className="font-medium"> awaiting IT verification</span>, then verify him as <span className="font-mono">it.blacklion</span>.
+            Try <span className="font-mono">dr.yonas</span> — a Black Lion doctor whose account is still
+            <span className="font-medium"> awaiting IT verification</span>; sign in as <span className="font-mono">it.blacklion</span> to verify him.
           </p>
         </Card>
       </div>

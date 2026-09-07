@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PoolClient } from 'pg';
-import { createHmac, randomUUID } from 'crypto';
+import { createHash, createHmac, randomUUID } from 'crypto';
 import { Db, ConfigStore, Audit, Notifier, ChangeLog } from '../common/core.module';
 import { CurrentUser } from '../auth/auth.module';
 import { RoutingService } from '../routing/routing.module';
@@ -41,6 +41,8 @@ export interface CreateReferralDto {
   estimatedTravelMinutes?: number;
   isTestData?: boolean;
   submit?: boolean;                 // create + submit in one call
+  /** Imaging/documents uploaded with the referral (base64 data URLs). */
+  attachments?: { name: string; type?: string; size?: number; dataUrl: string; kind?: string }[];
 }
 
 /** BR-05: vitals mandatory unless emergency_override. */
@@ -112,6 +114,57 @@ export class ReferralService {
     }
   }
 
+  /* --------------------------------------------- real ward reservations */
+
+  /**
+   * BR-26 made concrete: reserving a bed decrements the ward's live free-bed
+   * count (append-only capacity rows, latest wins). Throws 409 when the ward
+   * has nothing left — the liaison must update the board or accept without a
+   * reservation, so availability shown to senders is never fiction.
+   */
+  private async takeBed(c: PoolClient, facilityId: string, wardType: string, user: CurrentUser): Promise<string> {
+    const pick = await c.query(
+      `SELECT DISTINCT ON (ward_type) ward_type, beds_total, beds_free
+         FROM facility_capacity
+        WHERE facility_id = $1 AND ward_type = ANY($2::text[])
+        ORDER BY ward_type, reported_at DESC`,
+      [facilityId, wardType === 'general' ? ['general'] : [wardType, 'general']],
+    );
+    const rows = pick.rows;
+    const ward = rows.find((w: any) => w.ward_type === wardType) || rows[0];
+    if (!ward || ward.beds_free === null || ward.beds_free <= 0) {
+      throw new BadRequestException({
+        message: `No free ${wardType} bed to reserve — update the availability board or accept without a reservation`,
+        hint: 'Reservations are real in this system: a reservation takes an actual bed.',
+      });
+    }
+    await c.query(
+      `INSERT INTO facility_capacity (facility_id, ward_type, beds_total, beds_free, reported_by)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [facilityId, ward.ward_type, ward.beds_total, ward.beds_free - 1, user.id],
+    );
+    return ward.ward_type;
+  }
+
+  /** Returns the reserved bed to the board (lapse, cancel, reroute). */
+  private async releaseBed(c: PoolClient, r: any): Promise<void> {
+    if (!r.bed_reserved || !r.reserved_ward_type) return;
+    const cur = await c.query(
+      `SELECT beds_total, beds_free FROM facility_capacity
+        WHERE facility_id = $1 AND ward_type = $2
+        ORDER BY reported_at DESC LIMIT 1`,
+      [r.target_facility_id, r.reserved_ward_type],
+    );
+    if (!cur.rows.length) return;
+    const { beds_total, beds_free } = cur.rows[0];
+    if (beds_total !== null && beds_free >= beds_total) return;
+    await c.query(
+      `INSERT INTO facility_capacity (facility_id, ward_type, beds_total, beds_free, reported_by)
+       VALUES ($1,$2,$3,$4,NULL)`,
+      [r.target_facility_id, r.reserved_ward_type, beds_total, beds_free + 1],
+    );
+  }
+
   private actorSide(r: any, user: CurrentUser): 'origin' | 'target' | 'system' {
     if (user.role === 'sysadmin') return 'system';
     if (r.origin_facility_id === user.facilityId) return 'origin';
@@ -124,7 +177,7 @@ export class ReferralService {
   /* -------------------------------------------------------------- create */
 
   async create(dto: CreateReferralDto, user: CurrentUser) {
-    if (!['hew', 'clinician', 'liaison', 'triage', 'specialist', 'sysadmin'].includes(user.role)) {
+    if (!['hew', 'clinician', 'doctor', 'liaison', 'triage', 'specialist', 'sysadmin'].includes(user.role)) {
       throw new ForbiddenException(`Role '${user.role}' may not create referrals`);
     }
 
@@ -261,6 +314,25 @@ export class ReferralService {
         [id, user.id, user.fullName, origin.id],
       );
 
+      // Imaging/documents sent with the referral (same limits as the
+      // attachments endpoint; stored in-DB at pilot scale).
+      for (const att of dto.attachments ?? []) {
+        const m = (att.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/s);
+        if (!m) throw new BadRequestException(`Attachment '${att.name}' is not a valid base64 data URL`);
+        const buf = Buffer.from(m[2], 'base64');
+        if (buf.length > 1_500_000) {
+          throw new BadRequestException(`Attachment '${att.name}' is too large (max 1.5 MB)`);
+        }
+        await c.query(
+          `INSERT INTO referral_attachment
+             (referral_id, kind, object_key, sha256, size_bytes, mime_type, uploaded_by, file_name, content)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [id, att.kind ?? 'document', `db://${id}/${att.name}`,
+           createHash('sha256').update(buf).digest('hex'),
+           buf.length, m[1], user.id, att.name, buf],
+        );
+      }
+
       await this.audit.record({
         actorUserId: user.id, actorFacilityId: origin.id,
         action: 'create', resourceType: 'referral', resourceId: id,
@@ -330,6 +402,9 @@ export class ReferralService {
             if (!payload.targetFacilityId) throw new BadRequestException('reroute requires targetFacilityId');
             const nt = await c.query(`SELECT * FROM facility WHERE id = $1`, [payload.targetFacilityId]);
             if (!nt.rows.length) throw new NotFoundException('New target facility not found');
+            await this.releaseBed(c, r);
+            set('bed_reserved', false);
+            set('reserved_ward_type', null);
             set('target_facility_id', nt.rows[0].id);
             set('target_facility_tier', nt.rows[0].tier);
             set('target_facility_name', nt.rows[0].name_lat);
@@ -378,8 +453,12 @@ export class ReferralService {
           set('receiving_clinician_name', payload.receivingClinicianName ?? user.fullName);
           set('receiving_clinician_phone', payload.receivingClinicianPhone ?? user.phone ?? null);
           if (payload.bedReserved) {
+            // The reservation is REAL: it takes an actual bed off the ward's
+            // availability board, so a promise to the sender is a promise.
+            const ward = await this.takeBed(c, r.target_facility_id, payload.wardType || 'general', user);
             const hrs = await this.cfg.bedReservationHours(r.urgency);
             set('bed_reserved', true);
+            set('reserved_ward_type', ward);
             set('bed_reservation_expires_at', new Date(Date.now() + hrs * 3600 * 1000));
           }
           set('validity_token', this.mintToken(r));
@@ -505,7 +584,9 @@ export class ReferralService {
           break;
 
         case 'reservation_lapse':
+          await this.releaseBed(c, r);
           set('bed_reserved', false);
+          set('reserved_ward_type', null);
           break;
 
         /* ---- transit */
@@ -593,6 +674,10 @@ export class ReferralService {
           break;
 
         case 'cancel':
+          await this.releaseBed(c, r);
+          if (r.bed_reserved) { set('bed_reserved', false); set('reserved_ward_type', null); }
+          break;
+
         case 'close_declined_all':
         case 'lost_timeout':
         case 'supply_info':
@@ -642,6 +727,29 @@ export class ReferralService {
 
   /* ----------------------------------------------------------- retrieval */
 
+  /** Facility contact snapshot — what a receiving clinician needs to call back. */
+  private presentFacility(f: any) {
+    if (!f) return null;
+    return {
+      id: f.id, name: f.name_lat, nameAm: f.name_am, type: f.facility_type,
+      tier: f.tier, phone: f.phone, address: f.address_line, poBox: f.po_box,
+      region: f.region_name ?? null, zone: f.zone_name ?? null,
+      is24h: f.is_24h, hasAmbulance: f.has_ambulance,
+    };
+  }
+
+  private async loadFacilitySnapshot(q: (s: string, p: any[]) => Promise<any[]>, id: string) {
+    const rows = await q(
+      `SELECT f.*, rg.name_lat AS region_name, zn.name_lat AS zone_name
+         FROM facility f
+         LEFT JOIN admin_unit rg ON rg.id = f.region_id
+         LEFT JOIN admin_unit zn ON zn.id = f.zone_id
+        WHERE f.id = $1`,
+      [id],
+    );
+    return this.presentFacility(rows[0]);
+  }
+
   private async hydrate(r: any, user: CurrentUser, client?: PoolClient) {
     const q = client
       ? (s: string, p: any[]) => client.query(s, p).then((x) => x.rows)
@@ -653,12 +761,49 @@ export class ReferralService {
          FROM referral_transition WHERE referral_id = $1 ORDER BY occurred_at ASC`,
       [r.id],
     );
+    const referrer = (await q(
+      `SELECT role, title, department, license_number FROM app_user WHERE id = $1`,
+      [r.referring_user_id],
+    ))[0];
+    const attachments = await q(
+      `SELECT id, file_name, mime_type, size_bytes, kind, uploaded_at,
+              (SELECT full_name FROM app_user WHERE id = uploaded_by) AS uploaded_by_name
+         FROM referral_attachment WHERE referral_id = $1 ORDER BY uploaded_at ASC`,
+      [r.id],
+    );
 
     let side: 'origin' | 'target' | 'system' | 'none' = 'none';
     try { side = this.actorSide(r, user); } catch { side = 'none'; }
 
+    /* Feedback stays out of clinical views. Only the IT administrator of a
+     * party facility sees it — and only the rows about THEIR facility. */
+    let feedback: any[] | undefined;
+    if (user.role === 'it_admin'
+        && (r.origin_facility_id === user.facilityId || r.target_facility_id === user.facilityId)) {
+      feedback = await q(
+        `SELECT id, facility_role, rating, comment, created_at
+           FROM referral_feedback WHERE referral_id = $1 AND facility_id = $2`,
+        [r.id, user.facilityId],
+      );
+    }
+
     return {
       ...r,
+      originFacility: await this.loadFacilitySnapshot(q, r.origin_facility_id),
+      targetFacility: await this.loadFacilitySnapshot(q, r.target_facility_id),
+      referringUser: {
+        name: r.referring_user_name,
+        phone: r.referring_user_phone,
+        role: referrer?.role ?? null,
+        title: referrer?.title ?? null,
+        department: referrer?.department ?? null,
+        licenseNumber: referrer?.license_number ?? null,
+      },
+      attachments: attachments.map((a: any) => ({
+        id: a.id, name: a.file_name, type: a.mime_type, size: a.size_bytes,
+        kind: a.kind, uploadedAt: a.uploaded_at, uploadedBy: a.uploaded_by_name,
+      })),
+      ...(feedback !== undefined ? { feedback } : {}),
       patient: patient ? {
         id: patient.id,
         name: [patient.given_name_lat, patient.fathers_name_lat, patient.grandfathers_name_lat]
@@ -678,14 +823,71 @@ export class ReferralService {
     };
   }
 
+  /**
+   * Patient-safe view: status, both facilities' contact details, the receiving
+   * clinician, follow-up instructions and the patient's own ratings — never
+   * the clinical chart, vitals or internal notes.
+   */
+  async patientView(referralId: string, patientId: string) {
+    const r = await this.db.one(`SELECT * FROM referral WHERE id = $1`, [referralId]);
+    if (!r) throw new NotFoundException('Referral not found');
+    if (r.patient_id !== patientId) throw new ForbiddenException('Not your referral');
+    const q = (s: string, p: any[]) => this.db.query(s, p);
+    const feedback = await q(
+      `SELECT id, facility_role, rating, comment, created_at
+         FROM referral_feedback WHERE referral_id = $1`,
+      [r.id],
+    );
+    const transitions = await q(
+      `SELECT to_status, event, occurred_at FROM referral_transition
+        WHERE referral_id = $1 ORDER BY occurred_at ASC`,
+      [r.id],
+    );
+    const outcome = r.outcome || {};
+    return {
+      id: r.id,
+      referral_code: r.referral_code,
+      status: r.status,
+      urgency: r.urgency,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      arrived_at: r.arrived_at,
+      outcome_submitted_at: r.outcome_submitted_at,
+      originFacility: await this.loadFacilitySnapshot(q, r.origin_facility_id),
+      targetFacility: await this.loadFacilitySnapshot(q, r.target_facility_id),
+      receiving_clinician_name: r.receiving_clinician_name,
+      receiving_clinician_phone: r.receiving_clinician_phone,
+      bed_reserved: r.bed_reserved,
+      reserved_ward_type: r.reserved_ward_type,
+      outcome: r.outcome
+        ? { disposition: outcome.disposition ?? null, followUpInstructions: outcome.followUpInstructions ?? null }
+        : null,
+      transitions,
+      feedback,
+      feedbackEligible: !!r.arrived_at || String(r.status).startsWith('CLOSED_'),
+      clinicalRedacted: true,
+      actorSide: 'patient',
+      allowedEvents: [],
+    };
+  }
+
   async get(id: string, user: CurrentUser) {
     const r = await this.db.one(`SELECT * FROM referral WHERE id = $1`, [id]);
     if (!r) throw new NotFoundException('Referral not found');
+
+    // Patients see their own referrals through the patient-safe projection.
+    if (user.role === 'patient') {
+      if (r.patient_id !== user.patientId) {
+        throw new ForbiddenException('Not your referral');
+      }
+      return this.patientView(id, user.patientId!);
+    }
 
     // BR-51: relationship-based access control. Oversight roles get metadata only.
     const oversight = ['woreda', 'region', 'moh', 'cbhi'].includes(user.role);
     // BR-51: administrative roles are never a clinical "party", even when their
     // registered facility happens to be the origin or target of the referral.
+    const admin = user.role === 'it_admin';
     const party = !oversight
       && (r.origin_facility_id === user.facilityId || r.target_facility_id === user.facilityId);
     if (!party && !oversight && user.role !== 'sysadmin') {
@@ -695,12 +897,12 @@ export class ReferralService {
     await this.audit.record({
       actorUserId: user.id, actorFacilityId: user.facilityId,
       action: 'read_payload', resourceType: 'referral', resourceId: id,
-      purpose: party ? 'care_coordination' : 'oversight',
+      purpose: party ? (admin ? 'administration' : 'care_coordination') : 'oversight',
     });
 
     const full = await this.hydrate(r, user);
-    if (oversight) {
-      // Data minimisation: oversight sees flow, not the chart.
+    if (oversight || admin) {
+      // Data minimisation: oversight and IT administration see flow, not the chart.
       const { clinical, pre_referral, outcome, provisional_diagnosis, ...rest } = full as any;
       return { ...rest, clinicalRedacted: true };
     }
@@ -721,7 +923,9 @@ export class ReferralService {
     const vals: any[] = [];
     let i = 1;
 
-    if (['woreda', 'region', 'moh', 'sysadmin'].includes(user.role)) {
+    if (user.role === 'patient') {
+      where.push(`patient_id = $${i++}`); vals.push(user.patientId);
+    } else if (['woreda', 'region', 'moh', 'sysadmin'].includes(user.role)) {
       // oversight: everything in scope
     } else if (q.direction === 'inbound') {
       where.push(`target_facility_id = $${i++}`); vals.push(user.facilityId);
@@ -744,7 +948,8 @@ export class ReferralService {
               r.origin_facility_id, r.target_facility_id,
               r.created_at, r.sla_deadline_at, r.sla_breached, r.decision, r.decline_reason,
               r.arrived_at, r.outcome_submitted_at, r.outcome_acknowledged_at, r.version,
-              p.given_name_lat, p.fathers_name_lat, p.sex, p.age_value, p.age_unit
+              p.given_name_lat, p.fathers_name_lat, p.sex, p.age_value, p.age_unit,
+              (SELECT count(*)::int FROM referral_attachment a WHERE a.referral_id = r.id) AS "attachmentCount"
          FROM referral r JOIN patient p ON p.id = r.patient_id
         ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
         ORDER BY
@@ -756,6 +961,8 @@ export class ReferralService {
 
     return rows.map((r) => ({
       ...r,
+      // Patients and administrative readers get the flow, not the diagnosis.
+      provisional_diagnosis: ['patient', 'it_admin'].includes(user.role) ? null : r.provisional_diagnosis,
       patientName: [r.given_name_lat, r.fathers_name_lat].filter(Boolean).join(' '),
       patientAge: r.age_value ? `${r.age_value} ${r.age_unit}` : null,
       slaRemainingMinutes: r.sla_deadline_at && SLA_ACTIVE_STATES.includes(r.status)

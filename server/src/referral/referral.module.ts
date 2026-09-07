@@ -7,6 +7,7 @@ import { User, CurrentUser, Public, Roles } from '../auth/auth.module';
 import { RoutingModule } from '../routing/routing.module';
 import { AdminController } from '../admin.controller';
 import { ReferralScheduler } from './scheduler';
+import { AttachmentsController, AttachmentsService } from './attachments.controller';
 import { DECLINE_REASONS, OVERRIDE_REASONS, TIER_SKIP_REASONS, DISPOSITIONS, TRANSPORT_MODES, STATES } from './state-machine';
 
 /* ------------------------------------------------------------ CONTROLLER */
@@ -133,8 +134,8 @@ export class TokenController {
 
 @Module({
   imports: [RoutingModule],
-  providers: [ReferralService, ReferralScheduler],
-  controllers: [ReferralController, TokenController, AdminController],
+  providers: [ReferralService, ReferralScheduler, AttachmentsService],
+  controllers: [ReferralController, TokenController, AdminController, AttachmentsController],
   exports: [ReferralService],
 })
 export class ReferralModule {}

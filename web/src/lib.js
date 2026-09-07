@@ -3,9 +3,15 @@ import { demoApi } from './demo/api';
 
 /* ------------------------------------------------------------------ API */
 const BASE = import.meta.env.VITE_API_BASE || '';
-/** No API base configured -> run fully in the browser (static Vercel demo).
- *  Point VITE_API_BASE at the NestJS server and this layer disappears. */
-export const DEMO_MODE = !BASE;
+
+/**
+ * The app talks to the real NestJS API by default (dev: through the Vite proxy
+ * on /v1; production: VITE_API_BASE).
+ *
+ * VITE_DEMO=1 switches to the in-browser simulation used for the static
+ * Vercel showcase — same request/response contract, no server required.
+ */
+export const DEMO_MODE = import.meta.env.VITE_DEMO === '1';
 
 export class ApiError extends Error {
   constructor(status, body) {
