@@ -1,12 +1,18 @@
 node_modules/
 dist/
+*.log
+
+# Local secrets. .env.example files are templates and stay tracked.
 .env
 .env.local
 .env*.local
-*.log
+!.env.example
+!**/.env.example
 
 # Vercel CLI project link and pulled environment variables
 .vercel
 
-# Agent worktrees
-.claude/worktrees/
+# Agent/assistant tooling installed by integrations — local, not project code
+.agents/
+.claude/
+skills-lock.json
