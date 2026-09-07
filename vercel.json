@@ -1,0 +1,32 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm --prefix server install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund",
+  "buildCommand": "npm --prefix server run build && npm --prefix server prune --omit=dev && VITE_API_BASE=/api npm --prefix web run build",
+  "outputDirectory": "web/dist",
+  "functions": {
+    "api/*.js": {
+      "memory": 1024,
+      "maxDuration": 30,
+      "includeFiles": "server/dist/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}

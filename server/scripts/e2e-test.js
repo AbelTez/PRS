@@ -314,11 +314,7 @@ async function login(username) {
 
   // Force the SLA deadline into the past, then run the scheduler logic.
   const { Client } = require('pg');
-  const pg = new Client({
-    host: process.env.PGHOST || '127.0.0.1', port: parseInt(process.env.PGPORT || '5432', 10),
-    user: process.env.PGUSER || 'erl', password: process.env.PGPASSWORD || 'erl',
-    database: process.env.PGDATABASE || 'erl_dev',
-  });
+  const pg = new Client(require('./db-config'));
   await pg.connect();
   await pg.query(`UPDATE referral SET sla_deadline_at = now() - interval '1 minute' WHERE id = $1`, [r3.body.id]);
   await api('POST', '/v1/admin/run-schedulers', {}, (await login('sysadmin')).accessToken);

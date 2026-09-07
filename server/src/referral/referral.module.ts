@@ -7,7 +7,9 @@ import { User, CurrentUser, Public, Roles } from '../auth/auth.module';
 import { RoutingModule } from '../routing/routing.module';
 import { AdminController } from '../admin.controller';
 import { ReferralScheduler } from './scheduler';
+import { SchedulerTickInterceptor } from './scheduler-tick.interceptor';
 import { AttachmentsController, AttachmentsService } from './attachments.controller';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { DECLINE_REASONS, OVERRIDE_REASONS, TIER_SKIP_REASONS, DISPOSITIONS, TRANSPORT_MODES, STATES } from './state-machine';
 
 /* ------------------------------------------------------------ CONTROLLER */
@@ -134,7 +136,13 @@ export class TokenController {
 
 @Module({
   imports: [RoutingModule],
-  providers: [ReferralService, ReferralScheduler, AttachmentsService],
+  providers: [
+    ReferralService,
+    ReferralScheduler,
+    AttachmentsService,
+    // Global: keeps the referral clocks running where cron cannot (serverless).
+    { provide: APP_INTERCEPTOR, useClass: SchedulerTickInterceptor },
+  ],
   controllers: [ReferralController, TokenController, AdminController, AttachmentsController],
   exports: [ReferralService],
 })

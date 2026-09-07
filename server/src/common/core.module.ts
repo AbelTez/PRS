@@ -9,14 +9,38 @@ export class Db implements OnModuleDestroy {
   public pool: Pool;
 
   constructor() {
-    this.pool = new Pool({
-      host: process.env.PGHOST || '127.0.0.1',
-      port: parseInt(process.env.PGPORT || '5432', 10),
-      user: process.env.PGUSER || 'erl',
-      password: process.env.PGPASSWORD || 'erl',
-      database: process.env.PGDATABASE || 'erl_dev',
-      max: parseInt(process.env.PG_POOL_MAX || '10', 10),
-    });
+    // Managed Postgres (Neon on Vercel, Supabase, RDS…) hands out a single
+    // connection string; local development uses discrete PG* variables.
+    const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+    // Serverless invocations are short-lived and highly parallel: keep each
+    // instance's pool tiny and point it at the provider's pooled endpoint.
+    const serverless = !!process.env.VERCEL;
+    const max = parseInt(process.env.PG_POOL_MAX || (serverless ? '1' : '10'), 10);
+
+    this.pool = url
+      ? new Pool({ connectionString: url, max, ssl: Db.sslFor(url) })
+      : new Pool({
+        host: process.env.PGHOST || '127.0.0.1',
+        port: parseInt(process.env.PGPORT || '5432', 10),
+        user: process.env.PGUSER || 'erl',
+        password: process.env.PGPASSWORD || 'erl',
+        database: process.env.PGDATABASE || 'erl_dev',
+        max,
+      });
+
+    // An idle connection dropped by the provider must never take the process
+    // down — pg re-establishes on the next checkout.
+    this.pool.on('error', (e) => this.log.warn(`Idle client error: ${e.message}`));
+  }
+
+  /** Managed providers require TLS; `PGSSL_NO_VERIFY=true` relaxes verification. */
+  private static sslFor(url: string) {
+    const wantsSsl = /sslmode=(require|verify-ca|verify-full)/.test(url)
+      || process.env.PGSSL === 'true'
+      || !!process.env.VERCEL;
+    if (!wantsSsl) return undefined;
+    return { rejectUnauthorized: process.env.PGSSL_NO_VERIFY !== 'true' };
   }
 
   async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {

@@ -12,7 +12,9 @@ import { PortalModule } from './portal/portal.module';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // Cron needs a long-lived process. On serverless the clocks are driven by
+    // traffic instead (SchedulerTickInterceptor), so the timers are left off.
+    ...(process.env.VERCEL ? [] : [ScheduleModule.forRoot()]),
     CoreModule,
     AuthModule,
     RoutingModule,

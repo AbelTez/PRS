@@ -7,13 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const ROOT = path.resolve(__dirname, '../..');
 const PASSWORD = process.env.SEED_PASSWORD || 'Password123!';
-const cfg = {
-  host: process.env.PGHOST || '127.0.0.1',
-  port: parseInt(process.env.PGPORT || '5432', 10),
-  user: process.env.PGUSER || 'erl',
-  password: process.env.PGPASSWORD || 'erl',
-  database: process.env.PGDATABASE || 'erl_dev',
-};
+const cfg = require('./db-config');
 
 (async () => {
   const c = new Client(cfg);

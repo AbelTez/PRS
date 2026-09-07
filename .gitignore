@@ -1,4 +1,12 @@
 node_modules/
 dist/
 .env
+.env.local
+.env*.local
 *.log
+
+# Vercel CLI project link and pulled environment variables
+.vercel
+
+# Agent worktrees
+.claude/worktrees/

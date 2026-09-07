@@ -18,11 +18,37 @@ export class ReferralScheduler {
     username: 'system', fullName: 'System', role: 'sysadmin', facilityId: null as any,
   };
 
+  private lastTickAt = 0;
+
   constructor(private db: Db, private cfg: ConfigStore, private svc: ReferralService) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
   async tick() {
     if (process.env.DISABLE_SCHEDULER === 'true') return;
+    await this.runAll();
+  }
+
+  /**
+   * Serverless-safe clock. A Vercel function has no long-lived process, so the
+   * cron above never fires there; instead traffic drives the clocks — at most
+   * once per `minIntervalMs` per warm instance. Awaited rather than
+   * fire-and-forget because a serverless runtime may freeze the instance the
+   * moment the response is sent, which would silently drop the work.
+   */
+  async tickIfDue(minIntervalMs = 30_000) {
+    if (process.env.DISABLE_SCHEDULER === 'true') return;
+    const now = Date.now();
+    if (now - this.lastTickAt < minIntervalMs) return;
+    this.lastTickAt = now;
+    try {
+      await this.runAll();
+    } catch (e: any) {
+      // Never let housekeeping fail a user's request.
+      this.log.warn(`Scheduler tick failed: ${e.message}`);
+    }
+  }
+
+  private async runAll() {
     await this.slaBreaches();
     await this.reservationLapses();
     await this.arrivalGrace();
