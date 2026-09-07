@@ -19,7 +19,7 @@ export class Db implements OnModuleDestroy {
     const max = parseInt(process.env.PG_POOL_MAX || (serverless ? '1' : '10'), 10);
 
     this.pool = url
-      ? new Pool({ connectionString: url, max, ssl: Db.sslFor(url) })
+      ? new Pool({ ...Db.fromUrl(url), max })
       : new Pool({
         host: process.env.PGHOST || '127.0.0.1',
         port: parseInt(process.env.PGPORT || '5432', 10),
@@ -41,6 +41,31 @@ export class Db implements OnModuleDestroy {
       || !!process.env.VERCEL;
     if (!wantsSsl) return undefined;
     return { rejectUnauthorized: process.env.PGSSL_NO_VERIFY !== 'true' };
+  }
+
+  /**
+   * Expand a connection string into explicit fields rather than handing `pg`
+   * the raw string.
+   *
+   * `pg` merges the parsed connection string OVER the config object and treats
+   * a URL without an explicit port as having none, so a stray PGPORT/PGHOST in
+   * the environment silently wins over the URL — the remote database then
+   * times out with an empty error message. Discrete values leave nothing for
+   * the environment to fill in.
+   */
+  private static fromUrl(url: string) {
+    const u = new URL(url);
+    const cfg: Record<string, any> = {
+      host: u.hostname,
+      port: u.port ? Number(u.port) : 5432,
+      database: decodeURIComponent(u.pathname.replace(/^\//, '')) || undefined,
+      user: u.username ? decodeURIComponent(u.username) : undefined,
+      password: u.password ? decodeURIComponent(u.password) : undefined,
+      ssl: Db.sslFor(url),
+    };
+    const options = u.searchParams.get('options');
+    if (options) cfg.options = options;
+    return cfg;
   }
 
   async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {

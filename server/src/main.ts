@@ -1,5 +1,11 @@
 import 'reflect-metadata';
+import * as path from 'path';
 import * as dotenv from 'dotenv';
+// Load server/.env wherever the process was started from (the root
+// package.json scripts run from the repo root), then any .env in the working
+// directory. dotenv never overwrites variables that are already set, so real
+// environment variables — a platform's injected config — always win.
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
