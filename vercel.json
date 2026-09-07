@@ -6,7 +6,6 @@
   "outputDirectory": "web/dist",
   "functions": {
     "api/*.js": {
-      "memory": 1024,
       "maxDuration": 30,
       "includeFiles": "server/dist/**"
     }
