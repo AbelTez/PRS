@@ -50,11 +50,28 @@ function bootstrap() {
   return appPromise;
 }
 
+/**
+ * The platform mounts this function at /api and rewrites /api/<rest> to it,
+ * carrying the real path in `__erl_path` (see vercel.json). Nest's own routes
+ * are /v1/**, so rebuild the path it expects — preserving any genuine query
+ * string — and fall back to simply stripping the mount prefix when the
+ * function is called directly (local harness, or /api itself).
+ */
+function apiPath(rawUrl) {
+  const q = rawUrl.indexOf('?');
+  const params = new URLSearchParams(q >= 0 ? rawUrl.slice(q + 1) : '');
+  const forwarded = params.get('__erl_path');
+  if (forwarded === null) {
+    return rawUrl.replace(/^\/api(?=\/|\?|$)/, '') || '/';
+  }
+  params.delete('__erl_path');
+  const rest = params.toString();
+  return `/${forwarded.replace(/^\/+/, '')}${rest ? `?${rest}` : ''}`;
+}
+
 module.exports = async (req, res) => {
   try {
-    // Vercel routes this function at /api/**, while the API's own routes are
-    // /v1/**. Strip the mount prefix so Nest sees the paths it declares.
-    req.url = req.url.replace(/^\/api(?=\/|\?|$)/, '') || '/';
+    req.url = apiPath(req.url);
 
     const app = await bootstrap();
     return app(req, res);

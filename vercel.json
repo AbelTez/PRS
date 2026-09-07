@@ -5,13 +5,17 @@
   "buildCommand": "npm --prefix server run build && npm --prefix server prune --omit=dev && VITE_API_BASE=/api npm --prefix web run build",
   "outputDirectory": "web/dist",
   "functions": {
-    "api/*.js": {
+    "api/index.js": {
       "maxDuration": 30,
       "includeFiles": "server/dist/**"
+    },
+    "api/health.js": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/api?__erl_path=$1" },
+    { "source": "/((?!api).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
