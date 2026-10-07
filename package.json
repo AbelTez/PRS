@@ -10,6 +10,8 @@
     "build:web": "vite build",
     "dev:api": "npm --prefix server run start:dev",
     "test:deployment": "node tests/deployment-smoke.mjs",
+    "test:consultations": "node server/scripts/e2e-consultations.js",
+    "seed:consultations": "node server/scripts/seed-consultations.js",
     "preview": "vite preview"
   },
   "dependencies": {

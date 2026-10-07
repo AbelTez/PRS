@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { get, post, ApiError, useAuth, humanCode } from './lib';
 import {
   Button, Card, Field, Input, Select, Textarea, ErrorBox, Badge, Notice,
@@ -11,6 +11,8 @@ const STEPS = ['Patient', 'Clinical', 'Destination', 'Confirm'];
 
 export default function NewReferral() {
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  const consultationId = params.get('consultationId');
   const user = useAuth((s) => s.user);
 
   const [step, setStep] = useState(0);
@@ -48,6 +50,18 @@ export default function NewReferral() {
     get('/v1/reason-codes').then(setReasonCodes).catch(() => {});
     get('/v1/referrals/vocabulary').then(setVocab).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!consultationId) return;
+    let alive = true;
+    get(`/v1/consultations/${consultationId}/referral-context`).then(c => {
+      if (!alive) return;
+      setPatient(c.patient);
+      setClinical(v => ({...v, presentingComplaint: c.summary}));
+      setStep(1);
+    }).catch(e => { if (alive) setError(e); });
+    return () => { alive = false; };
+  }, [consultationId]);
 
   const reason = reasonCodes.find((r) => r.code === clinical.reasonCode);
   const urgency = reason?.default_urgency || 'routine';
@@ -93,6 +107,7 @@ export default function NewReferral() {
     try {
       const rank = routing.candidates.findIndex((c) => c.facilityId === chosen.facilityId) + 1;
       const payload = {
+        consultationId: consultationId || undefined,
         patientId: patient.id,
         reasonCode: clinical.reasonCode,
         targetFacilityId: chosen.facilityId,
@@ -134,6 +149,7 @@ export default function NewReferral() {
       />
 
       {/* the wizard: connected nodes, joined by the brand rail */}
+      {consultationId && <Notice>Prepared from a consultation. Review the patient and clinical details before submitting; the usual referral requirements still apply.</Notice>}
       <ol className="flex gap-2" aria-label="Referral wizard progress">
         {STEPS.map((s, i) => {
           const done = i < step;

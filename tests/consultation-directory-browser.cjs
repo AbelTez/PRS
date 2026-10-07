@@ -1,0 +1,56 @@
+// Read-only UI smoke test: no consultation or patient is submitted.
+const assert = require('node:assert/strict');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const site = process.env.SITE_URL || 'http://127.0.0.1:5183';
+(async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(site+'/login');
+    await page.getByLabel('Username', { exact: true }).fill('dr.abdi');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL('**/referrals');
+    await page.goto(site+'/consultations/new');
+    const facility = page.getByLabel('Facility', { exact: true });
+    const specialty = page.getByLabel('Specialty', { exact: true });
+    const doctor = page.getByLabel('Consulting doctor', { exact: false });
+    const patient = page.getByLabel('Patient', { exact: true });
+    assert.equal(await doctor.isDisabled(), true);
+    await facility.locator('option').filter({ hasText: 'Zewditu' }).waitFor({ state: 'attached' });
+    assert.ok(await facility.locator('option').count()>3);
+    await patient.locator('option').filter({ hasText: 'Sample Aster' }).waitFor({ state: 'attached' });
+    const sample = await patient.locator('option').filter({ hasText: 'Sample Aster' }).getAttribute('value');
+    await patient.selectOption(sample);
+    await page.getByRole('checkbox').check();
+    console.log('PASS patients load without typing and require sharing confirmation');
+    await page.getByLabel('Search facilities', { exact: true }).fill('black lion');
+    assert.equal(await facility.locator('option').count(),2);
+    await facility.selectOption({ label: 'Black Lion Specialised Hospital' });
+    assert.equal(await page.getByRole('checkbox').isChecked(),false);
+    await specialty.selectOption({ label: 'Cardiology' });
+    await page.getByLabel('Doctor name', { exact: true }).fill('hAnA');
+    await doctor.selectOption({ label: '[Test doctor] Dr Hana Tesfaye · Cardiology' });
+    assert.equal(await doctor.locator('option').count(),2);
+    console.log('PASS facility search, specialty and name narrow to the expected sample specialist');
+    await page.getByLabel('Doctor name', { exact: true }).fill('NoSuchDoctor');
+    await page.getByText('No available doctors match at this facility.', { exact: false }).waitFor();
+    assert.equal(await doctor.inputValue(),'');
+    assert.equal(await page.getByRole('button', { name: 'Send consultation request', exact: true }).isDisabled(),true);
+    await page.getByLabel('Search facilities', { exact: true }).fill('zewditu');
+    await facility.selectOption({ label: 'Zewditu Memorial Hospital' });
+    assert.equal(await specialty.inputValue(),'');
+    assert.equal(await page.getByLabel('Doctor name', { exact: true }).inputValue(),'');
+    await doctor.selectOption({ label: '[Test doctor] Dr Meron Hailu · Cardiology' });
+    assert.equal(await doctor.locator('option').filter({ hasText: 'Hana' }).count(),0);
+    console.log('PASS changing filters clears stale selections and excludes the previous facility');
+    await page.getByLabel('Find a patient from your facility', { exact: false }).fill('Sample Bekele');
+    await patient.locator('option').filter({ hasText: 'Sample Bekele' }).waitFor({ state: 'attached' });
+    assert.equal(await patient.locator('option').count(),2);
+    assert.equal(await patient.inputValue(),'');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.deepEqual(errors,[]);
+    console.log('PASS patient search, cleared patient selection and mobile layout');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode=1; });

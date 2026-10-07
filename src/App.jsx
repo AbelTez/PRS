@@ -9,6 +9,7 @@ import NewReferral from './NewReferral';
 import { ReferralList, ReferralDetail, Dashboard, AvailabilityAdmin } from './Pages';
 import PatientPortal, { TrackReferral } from './PatientPortal';
 import ITAdmin from './ITAdmin';
+import { ConsultationList, NewConsultation, ConsultationDetail, ConsultationAlerts, CONSULTATION_ROLES } from './consultations/Consultations';
 
 /* ================================================================ LANDING */
 function Landing() {
@@ -330,6 +331,7 @@ function Shell({ children }) {
       ? [['/it', 'Staff accounts'], ['/availability', 'Availability'], ['/dashboard', 'Dashboard']]
       : [
         ['/referrals', 'Referrals'],
+        ...(CONSULTATION_ROLES.includes(user?.role) && !DEMO_MODE ? [['/consultations', 'Consultations']] : []),
         ['/dashboard', 'Dashboard'],
         ...(['facility_admin', 'liaison', 'triage'].includes(user?.role) ? [['/availability', 'Availability']] : []),
       ];
@@ -374,6 +376,7 @@ function Shell({ children }) {
         </div>
       </header>
 
+      {CONSULTATION_ROLES.includes(user?.role) && !DEMO_MODE && <ConsultationAlerts />}
       <main className="erl-aurora">{children}</main>
 
       {/* mobile bottom nav — thumb reach on a low-end phone */}
@@ -422,6 +425,9 @@ export default function App() {
         <Route path="/referrals" element={<Protected roles={STAFF}><ReferralList /></Protected>} />
         <Route path="/referrals/:id" element={<Protected><ReferralDetail /></Protected>} />
         <Route path="/new" element={<Protected roles={STAFF}><NewReferral /></Protected>} />
+        <Route path="/consultations" element={<Protected roles={CONSULTATION_ROLES}><ConsultationList /></Protected>} />
+        <Route path="/consultations/new" element={<Protected roles={CONSULTATION_ROLES}><NewConsultation /></Protected>} />
+        <Route path="/consultations/:id" element={<Protected roles={CONSULTATION_ROLES}><ConsultationDetail /></Protected>} />
         <Route path="/dashboard" element={<Protected roles={STAFF}><Dashboard /></Protected>} />
         <Route path="/availability" element={<Protected roles={STAFF}><AvailabilityAdmin /></Protected>} />
         <Route path="/it" element={<Protected roles={['it_admin', 'facility_admin', 'sysadmin']}><ITAdmin /></Protected>} />

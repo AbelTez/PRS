@@ -7,7 +7,7 @@ async function request(path, options) {
   return fetch(new URL(path, origin), { signal: AbortSignal.timeout(60000), ...options });
 }
 
-for (const path of ['/', '/login', '/track', '/referrals', '/dashboard', '/portal', '/it']) {
+for (const path of ['/', '/login', '/track', '/referrals', '/dashboard', '/portal', '/it', '/consultations', '/consultations/new']) {
   const response = await request(path);
   assert.equal(response.status, 200, `${path} should serve the React app`);
   assert.match(response.headers.get('content-type'), /text\/html/);
@@ -50,4 +50,16 @@ if (process.env.SMOKE_USERNAME && process.env.SMOKE_PASSWORD) {
   assert.equal(me.status, 200);
   assert.equal((await me.json()).username, process.env.SMOKE_USERNAME);
   console.log('PASS real sign-in and authenticated session');
+  if (process.env.SMOKE_CONSULTATIONS === '1') {
+    for (const path of ['', '/facilities', '/doctors', '/patients', '/inbox']) {
+      const response = await request(`/api/v1/consultations${path}`, { headers });
+      assert.equal(response.status, 200, `Consultation endpoint ${path || '/'} should load`);
+      assert.match(response.headers.get('content-type'), /application\/json/);
+      await response.json();
+      console.log(`PASS authenticated consultations${path}`);
+    }
+    const anonymous = await request('/api/v1/consultations');
+    assert.equal(anonymous.status, 401);
+    console.log('PASS anonymous consultation access rejected');
+  }
 }

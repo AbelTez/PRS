@@ -375,6 +375,7 @@ export function ReferralDetail() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 py-6 sm:p-6">
+      {['doctor','clinician','specialist'].includes(user?.role) && isParty && <Link to={`/consultations/new?referralId=${id}`} className="inline-block text-sm font-semibold text-brand-700">Request a doctor consultation →</Link>}
       <Link to="/referrals" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 transition hover:text-brand-700">
         <span aria-hidden>←</span> All referrals
       </Link>
