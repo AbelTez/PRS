@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "npm --prefix server run build",
+    "build:web": "vite build",
+    "dev:api": "npm --prefix server run start:dev",
+    "test:deployment": "node tests/deployment-smoke.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

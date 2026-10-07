@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { demoApi } from './demo/api';
 
 /* ------------------------------------------------------------------ API */
-const BASE = import.meta.env.VITE_API_BASE || '';
+const BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? '/api' : '');
 
 /**
  * The app talks to the real NestJS API by default (dev: through the Vite proxy

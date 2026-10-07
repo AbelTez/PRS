@@ -303,8 +303,8 @@ function Login() {
 
           <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-erl-sm ring-1 ring-brand-200/60">
             <Photo
-              src="/img/ethiopian-clinician.jpg"
-              alt="An Ethiopian healthcare professional using a computer"
+              src="/img/ethiopian-healthcare-team.jpg"
+              alt="Ethiopian doctors and nurses working together in a hospital"
               className="h-20 w-24 shrink-0 rounded-xl"
               imgClassName="h-20 w-24"
             />
