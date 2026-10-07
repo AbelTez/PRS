@@ -11,7 +11,7 @@ const site = process.env.SITE_URL || 'http://127.0.0.1:5183';
     await page.goto(site+'/login');
     await page.getByLabel('Username', { exact: true }).fill('dr.abdi');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await page.waitForURL('**/referrals');
+    await page.waitForURL('**/home');
     await page.goto(site+'/consultations/new');
     const facility = page.getByLabel('Facility', { exact: true });
     const specialty = page.getByLabel('Specialty', { exact: true });

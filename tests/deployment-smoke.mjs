@@ -7,7 +7,7 @@ async function request(path, options) {
   return fetch(new URL(path, origin), { signal: AbortSignal.timeout(60000), ...options });
 }
 
-for (const path of ['/', '/login', '/track', '/referrals', '/dashboard', '/portal', '/it', '/consultations', '/consultations/new']) {
+for (const path of ['/', '/login', '/track', '/home', '/referrals', '/dashboard', '/portal', '/it', '/consultations', '/consultations/new']) {
   const response = await request(path);
   assert.equal(response.status, 200, `${path} should serve the React app`);
   assert.match(response.headers.get('content-type'), /text\/html/);

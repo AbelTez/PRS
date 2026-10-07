@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import {
-  BrowserRouter, Routes, Route, Navigate, NavLink, Link, useNavigate,
+  BrowserRouter, Routes, Route, Navigate, Link, useNavigate,
 } from 'react-router-dom';
-import { useAuth, humanCode, DEMO_MODE } from './lib';
+import { useAuth, DEMO_MODE } from './lib';
 import { Button, Card, Field, Input, ErrorBox, Notice } from './ui';
 import { BrandLockup, LogoMark, ConnectionField, FlowSteps, IconTile, Photo } from './brand';
 import NewReferral from './NewReferral';
-import { ReferralList, ReferralDetail, Dashboard, AvailabilityAdmin } from './Pages';
+import { Dashboard, AvailabilityAdmin } from './Pages';
+import ReferralList from './ReferralList';
+import ReferralDetail from './ReferralDetail';
+import Home from './Home';
+import Shell, { homeFor } from './Shell';
 import PatientPortal, { TrackReferral } from './PatientPortal';
 import ITAdmin from './ITAdmin';
-import { ConsultationList, NewConsultation, ConsultationDetail, ConsultationAlerts, CONSULTATION_ROLES } from './consultations/Consultations';
+import { ConsultationList, NewConsultation, ConsultationDetail, CONSULTATION_ROLES } from './consultations/Consultations';
 
 /* ================================================================ LANDING */
 function Landing() {
@@ -212,13 +216,6 @@ const DEMO_ACCOUNTS = [
   ]},
 ];
 
-function homeFor(user) {
-  if (!user) return '/login';
-  if (user.role === 'patient') return '/portal';
-  if (user.role === 'it_admin') return '/it';
-  return '/referrals';
-}
-
 function Login() {
   const login = useAuth((s) => s.login);
   const nav = useNavigate();
@@ -320,91 +317,6 @@ function Login() {
   );
 }
 
-/* ================================================================== SHELL */
-function Shell({ children }) {
-  const { user, logout } = useAuth();
-  const nav = useNavigate();
-
-  const links = user?.role === 'patient'
-    ? [['/portal', 'My referrals']]
-    : user?.role === 'it_admin'
-      ? [['/it', 'Staff accounts'], ['/availability', 'Availability'], ['/dashboard', 'Dashboard']]
-      : [
-        ['/referrals', 'Referrals'],
-        ...(CONSULTATION_ROLES.includes(user?.role) && !DEMO_MODE ? [['/consultations', 'Consultations']] : []),
-        ['/dashboard', 'Dashboard'],
-        ...(['facility_admin', 'liaison', 'triage'].includes(user?.role) ? [['/availability', 'Availability']] : []),
-      ];
-
-  return (
-    <div className="min-h-screen bg-slate-100 pb-20 sm:pb-0">
-      <header className="sticky top-0 z-40 border-b border-brand-900/30 bg-gradient-to-r from-brand-800 to-brand-600 text-white shadow-erl-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-3">
-            <BrandMark light />
-          </div>
-          <nav className="hidden gap-1 sm:flex">
-            {links.map(([to, label]) => (
-              <NavLink
-                key={to} to={to}
-                className={({ isActive }) =>
-                  `relative rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
-                    isActive
-                      ? 'bg-white/15 text-white ring-1 ring-white/25'
-                      : 'text-brand-100 hover:bg-white/10 hover:text-white'
-                  }`}
-              >
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="flex items-center gap-2">
-            <div className="hidden text-right sm:block">
-              <p className="max-w-[190px] truncate text-sm font-semibold">{user?.fullName}</p>
-              <p className="max-w-[190px] truncate text-[11px] text-brand-100">
-                {humanCode(user?.role)}{user?.facilityName ? ` · ${user.facilityName}` : ''}
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              className="!bg-white/10 !text-white !ring-white/25 hover:!bg-white/20"
-              onClick={() => { logout(); nav('/'); }}
-            >
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {CONSULTATION_ROLES.includes(user?.role) && !DEMO_MODE && <ConsultationAlerts />}
-      <main className="erl-aurora">{children}</main>
-
-      {/* mobile bottom nav — thumb reach on a low-end phone */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-brand-200 bg-white/95 backdrop-blur sm:hidden">
-        {links.map(([to, label]) => (
-          <NavLink
-            key={to} to={to}
-            className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-1 py-2.5 text-[12px] font-semibold transition ${
-                isActive ? 'text-brand-700' : 'text-slate-500'
-              }`}
-          >
-            {({ isActive }) => (
-              <>
-                <span
-                  aria-hidden
-                  className={`h-1 w-8 rounded-full transition ${isActive ? 'bg-brand-500' : 'bg-transparent'}`}
-                />
-                {label}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-    </div>
-  );
-}
-
 function Protected({ roles, children }) {
   const user = useAuth((s) => s.user);
   if (!user) return <Navigate to="/login" replace />;
@@ -421,6 +333,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/track" element={<TrackReferral />} />
+        <Route path="/home" element={<Protected roles={STAFF}><Home /></Protected>} />
         <Route path="/portal" element={<Protected roles={['patient']}><PatientPortal /></Protected>} />
         <Route path="/referrals" element={<Protected roles={STAFF}><ReferralList /></Protected>} />
         <Route path="/referrals/:id" element={<Protected><ReferralDetail /></Protected>} />
