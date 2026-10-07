@@ -9,6 +9,8 @@ import {
 } from './ui';
 import { Icon, IconTile, SectionLabel, FlowPulse } from './brand';
 import { useWorkload } from './workspace';
+import { useAiStatus, useAiCall } from './ai/useAi';
+import { AiButton, AiError } from './ai/AiParts';
 import { LIFECYCLE, lifecycleState, vitalFlag, CLINICAL_ROLES, OVERSIGHT_ROLES, statusGroup } from './referrals';
 
 /* ============================================================================
@@ -438,6 +440,18 @@ export default function ReferralDetail() {
   // their registered facility is the origin or target — show them a read-only view.
   const readOnly = OVERSIGHT_ROLES.includes(user?.role) || user?.role === 'it_admin';
   const side = readOnly ? 'none' : r?.actorSide;
+  const ai = useAiStatus();
+  const draftAi = useAiCall('draft', JSON.stringify([id, sheet, f]));
+  async function draftDecline() {
+    const x = await draftAi.run({ kind: 'decline_note', redactNames: [r?.patient?.name],
+      context: { reason: f.declineReason, caseSummary: [r?.provisional_diagnosis, humanCode(r?.reason_code)].filter(Boolean).join(' — ') } });
+    if (x) setF((v) => ({ ...v, declineNote: x.message }));
+  }
+  async function draftFollowUp() {
+    const x = await draftAi.run({ kind: 'follow_up', redactNames: [r?.patient?.name],
+      context: { finalDiagnosis: f.finalDiagnosis, disposition: f.disposition, treatmentProvided: f.treatmentProvided, notes: f.followUpInstructions } });
+    if (x) setF((v) => ({ ...v, followUpInstructions: [x.message, x.amharic].filter(Boolean).join('\n\n') }));
+  }
   const actions = useActions(r || {}, side, (s) => {
     setF(s === 'depart' ? { transportMode: 'ambulance', escortType: 'none' } : {});
     setSheet(s);
@@ -707,6 +721,13 @@ export default function ReferralDetail() {
           </Field>
           <Field label={t('sheet.note')}><Textarea rows={3} value={f.declineNote || ''}
                  onChange={(e) => setF({ ...f, declineNote: e.target.value })} /></Field>
+          {ai.on('draft') && (
+            <div className="space-y-2">
+              <AiButton size="sm" busy={draftAi.busy} disabled={!f.declineReason} onClick={draftDecline}>{t('ai.draft.decline')}</AiButton>
+              <p className="text-xs text-slate-500">{t('ai.disclaimer')}</p>
+              <AiError error={draftAi.error} />
+            </div>
+          )}
         </div>
       </Sheet>
 
@@ -763,8 +784,18 @@ export default function ReferralDetail() {
           <Field label={t('sheet.treatmentProvided')}><Textarea rows={3} value={f.treatmentProvided || ''}
                  onChange={(e) => setF({ ...f, treatmentProvided: e.target.value })} /></Field>
           <Field label={t('sheet.followUp')} hint={t('sheet.followUpHint')}>
-            <Textarea rows={3} value={f.followUpInstructions || ''} onChange={(e) => setF({ ...f, followUpInstructions: e.target.value })} />
+            <Textarea rows={ai.on('draft') ? 6 : 3} value={f.followUpInstructions || ''} onChange={(e) => setF({ ...f, followUpInstructions: e.target.value })} />
           </Field>
+          {ai.on('draft') && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <AiButton size="sm" busy={draftAi.busy} disabled={!f.finalDiagnosis} onClick={draftFollowUp}>{t('ai.draft.followUp')}</AiButton>
+                <span className="text-xs text-slate-500">{t('ai.draft.followUpHint')}</span>
+              </div>
+              <p className="text-xs text-slate-500">{t('ai.disclaimer')}</p>
+              <AiError error={draftAi.error} />
+            </div>
+          )}
         </div>
       </Sheet>
 

@@ -6,6 +6,9 @@ import {
   UrgencyBadge, Spinner, inputCls, FileUpload, AttachmentList, checkCls,
 } from './ui';
 import { PageHead, SectionLabel, Icon, IconTile } from './brand';
+import { useT } from './i18n';
+import { useAiStatus, useAiCall, useAiStore } from './ai/useAi';
+import { AiButton, AiCard, AiApply, AiError } from './ai/AiParts';
 
 const STEPS = ['Patient', 'Clinical', 'Destination', 'Confirm'];
 
@@ -45,6 +48,13 @@ export default function NewReferral() {
   const [overrideReason, setOverrideReason] = useState('');
   const [tierSkipReason, setTierSkipReason] = useState('');
   const [vocab, setVocab] = useState(null);
+
+  // AI assistant (suggestions only — the doctor applies what they agree with)
+  const t = useT();
+  const ai = useAiStatus();
+  const caseAi = useAiCall('case-assist', JSON.stringify([patient?.id, clinical]));
+  const facilityAi = useAiCall('match-facility', JSON.stringify([patient?.id, clinical, routing]));
+  const [applied, setApplied] = useState({});
 
   useEffect(() => {
     get('/v1/reason-codes').then(setReasonCodes).catch(() => {});
@@ -139,6 +149,34 @@ export default function NewReferral() {
   }
 
   const num = (v) => (v === '' || v === null || v === undefined ? undefined : Number(v));
+
+  /* ------------------------------------------------------ AI helpers */
+  const ageParts = String(patient?.age || '').match(/(\d+)\s*(\w+)/);
+  function askCaseAi() {
+    setApplied({});
+    caseAi.run({
+      redactNames: [patient?.name],
+      reasonCode: clinical.reasonCode || undefined,
+      presentingComplaint: clinical.presentingComplaint,
+      provisionalDiagnosis: clinical.provisionalDiagnosis,
+      sex: patient?.sex, ageValue: ageParts?.[1], ageUnit: ageParts?.[2],
+      isPregnant: !!(patient?.isPregnant ?? form.isPregnant),
+      vitals: {
+        bpSystolic: num(clinical.bpSystolic), bpDiastolic: num(clinical.bpDiastolic), pulse: num(clinical.pulse),
+        respRate: num(clinical.respRate), temperatureC: num(clinical.temperatureC), spo2: num(clinical.spo2),
+        muacCm: num(clinical.muacCm), gestationalAgeWeeks: num(clinical.gestationalAgeWeeks),
+      },
+    });
+  }
+  function askFacilityAi() {
+    facilityAi.run({
+      reasonCode: clinical.reasonCode, redactNames: [patient?.name],
+      summary: [clinical.provisionalDiagnosis, clinical.presentingComplaint].filter(Boolean).join(' — '),
+    });
+  }
+  const aiPick = facilityAi.data && routing?.candidates.find((c) => c.facilityId === facilityAi.data.recommendedFacilityId);
+  const aiRunner = facilityAi.data?.runnerUpFacilityId && routing?.candidates.find((c) => c.facilityId === facilityAi.data.runnerUpFacilityId);
+  const URG_TONE = { emergency: 'text-danger-700', urgent: 'text-ember-700', routine: 'text-slate-700' };
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 py-6 sm:p-6">
@@ -359,6 +397,114 @@ export default function NewReferral() {
             )}
           </Card>
 
+          {ai.on('caseAssist') && (
+            <div className="space-y-3">
+              {!caseAi.data && (
+                <div className="flex flex-col gap-3 rounded-2xl bg-gradient-to-r from-violet-50 to-brand-50 p-4 ring-1 ring-violet-200 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-900">{t('ai.case.title')}</p>
+                    <p className="mt-0.5 text-sm text-slate-600">{t('ai.case.lede')}</p>
+                  </div>
+                  <AiButton busy={caseAi.busy} onClick={askCaseAi}>{t('ai.case.button')}</AiButton>
+                </div>
+              )}
+              <AiError error={caseAi.error} />
+              {caseAi.data && (
+                <AiCard title={t('ai.case.title')} onClose={caseAi.reset}
+                        footer={<div className="flex flex-wrap items-center justify-between gap-2">
+                          <AiButton size="sm" busy={caseAi.busy} onClick={askCaseAi}>{t('ai.refresh')}</AiButton>
+                          <button type="button" className="text-xs font-semibold text-violet-700 hover:underline"
+                                  onClick={() => useAiStore.getState().openPanel(t('ai.case.followUpQ', { dx: caseAi.data.diagnoses[0]?.name || clinical.provisionalDiagnosis || '' }))}>
+                            {t('ai.askMore')} →
+                          </button>
+                        </div>}>
+                  {caseAi.data.diagnoses.length > 0 && (
+                    <div>
+                      <SectionLabel>{t('ai.case.diagnoses')}</SectionLabel>
+                      <ul className="mt-1.5 space-y-2">
+                        {caseAi.data.diagnoses.map((d, i) => (
+                          <li key={i} className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200/80">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-semibold text-slate-900">
+                                {d.name}
+                                <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.likelihood === 'high' ? 'bg-violet-100 text-violet-800' : 'bg-slate-200 text-slate-600'}`}>
+                                  {t(`ai.likelihood.${d.likelihood}`)}
+                                </span>
+                              </p>
+                              <AiApply done={applied[`dx${i}`]} onClick={() => { setClinical((c) => ({ ...c, provisionalDiagnosis: d.name })); setApplied((a) => ({ ...a, [`dx${i}`]: true })); }}>
+                                {t('ai.case.useDiagnosis')}
+                              </AiApply>
+                            </div>
+                            {d.why && <p className="mt-1 text-slate-600">{d.why}</p>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {caseAi.data.urgency && (
+                    <div className="rounded-xl p-3 ring-1 ring-slate-200/80">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SectionLabel>{t('ai.case.urgency')}</SectionLabel>
+                        <UrgencyBadge urgency={caseAi.data.urgency} />
+                        {reason && caseAi.data.urgency !== urgency && (
+                          <span className="text-xs text-slate-500">{t('ai.case.ruleUrgency')} <span className={`font-semibold ${URG_TONE[urgency]}`}>{humanCode(urgency)}</span></span>
+                        )}
+                      </div>
+                      {caseAi.data.redFlags.length > 0 && (
+                        <ul className="mt-2 flex flex-wrap gap-1.5">
+                          {caseAi.data.redFlags.map((f) => (
+                            <li key={f} className="inline-flex items-center gap-1 rounded-lg bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-800 ring-1 ring-danger-200">
+                              <Icon name="alert" className="h-3 w-3" />{f}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {caseAi.data.reason && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-brand-50 p-3 ring-1 ring-brand-200">
+                      <p><span className="text-slate-500">{t('ai.case.reason')}</span> <span className="font-semibold text-slate-900">{caseAi.data.reason.name}</span></p>
+                      {clinical.reasonCode === caseAi.data.reason.code
+                        ? <span className="text-xs font-semibold text-emerald-700">{t('ai.case.reasonSelected')}</span>
+                        : <AiApply onClick={() => { setClinical((c) => ({ ...c, reasonCode: caseAi.data.reason.code })); setStabilisation([]); }}>{t('ai.case.useReason')}</AiApply>}
+                    </div>
+                  )}
+
+                  {caseAi.data.firstLineAdvice.length > 0 && (
+                    <div>
+                      <SectionLabel>{t('ai.case.advice')}</SectionLabel>
+                      <ul className="mt-1.5 space-y-1">
+                        {caseAi.data.firstLineAdvice.map((a, i) => (
+                          <li key={i} className="flex gap-2 text-slate-700"><Icon name="check" className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />{a}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {caseAi.data.monitorDuringTransfer.length > 0 && (
+                    <div>
+                      <SectionLabel>{t('ai.case.monitor')}</SectionLabel>
+                      <ul className="mt-1.5 space-y-1">
+                        {caseAi.data.monitorDuringTransfer.map((a, i) => (
+                          <li key={i} className="flex gap-2 text-slate-700"><Icon name="heartPulse" className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />{a}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {caseAi.data.missingInfo.length > 0 && (
+                    <div className="rounded-xl bg-ember-50 p-3 ring-1 ring-ember-200">
+                      <SectionLabel className="!text-ember-800">{t('ai.case.missing')}</SectionLabel>
+                      <ul className="mt-1 list-inside list-disc text-ember-900">
+                        {caseAi.data.missingInfo.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </AiCard>
+              )}
+            </div>
+          )}
+
           {reason?.stabilisation_items?.length > 0 && (
             <Card title="Pre-referral stabilisation" subtitle="Tailored to the reason code">
               <div className="space-y-1">
@@ -403,6 +549,41 @@ export default function NewReferral() {
       {/* ------------------------------------------------- STEP 3 */}
       {step === 2 && routing && (
         <>
+          {ai.on('matchFacility') && routing.candidates.length > 1 && (
+            <div className="space-y-3">
+              {!facilityAi.data && (
+                <div className="flex flex-col gap-3 rounded-2xl bg-gradient-to-r from-violet-50 to-brand-50 p-4 ring-1 ring-violet-200 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-900">{t('ai.facility.title')}</p>
+                    <p className="mt-0.5 text-sm text-slate-600">{t('ai.facility.lede')}</p>
+                  </div>
+                  <AiButton busy={facilityAi.busy} onClick={askFacilityAi}>{t('ai.facility.button')}</AiButton>
+                </div>
+              )}
+              <AiError error={facilityAi.error} />
+              {aiPick && (
+                <AiCard title={t('ai.facility.title')} onClose={facilityAi.reset}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-slate-900">{aiPick.name}</p>
+                      <p className="text-xs text-slate-500">{aiPick.distanceKm} km · ~{aiPick.estimatedTravelMinutes} min · {aiPick.bedsFree ?? '?'} beds free</p>
+                    </div>
+                    {chosen?.facilityId === aiPick.facilityId
+                      ? <span className="text-xs font-semibold text-emerald-700">{t('ai.facility.chosen')}</span>
+                      : <AiApply onClick={() => { setChosen(aiPick); if (facilityAi.data.suggestedOverrideReason) setOverrideReason(facilityAi.data.suggestedOverrideReason); }}>{t('ai.facility.choose')}</AiApply>}
+                  </div>
+                  <p className="text-slate-700">{facilityAi.data.reason}</p>
+                  {aiPick.facilityId !== routing.candidates[0].facilityId && (
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+                      {t('ai.facility.notTop')}{facilityAi.data.suggestedOverrideReason && <> {t('ai.facility.override', { reason: humanCode(facilityAi.data.suggestedOverrideReason) })}</>}
+                    </p>
+                  )}
+                  {aiRunner && <p className="text-xs text-slate-500"><span className="font-semibold">{t('ai.facility.runnerUp')}</span> {aiRunner.name}{facilityAi.data.runnerUpReason ? ` — ${facilityAi.data.runnerUpReason}` : ''}</p>}
+                </AiCard>
+              )}
+            </div>
+          )}
+
           <Card title="Facilities that can treat this patient"
                 subtitle={`Ranked by capability, distance, acceptance history and free beds`}>
             {routing.candidates.length === 0 && (
@@ -423,6 +604,7 @@ export default function NewReferral() {
                       <div className="min-w-0">
                         <p className="font-semibold tracking-[-0.015em] text-slate-900">
                           {i === 0 && <Badge className="mr-2 bg-brand-600 text-white ring-brand-700">Best match</Badge>}
+                          {aiPick?.facilityId === c.facilityId && <Badge className="mr-2 bg-violet-100 text-violet-800 ring-violet-300">✦ {t('ai.facility.badge')}</Badge>}
                           {c.name}
                         </p>
                         <p className="mt-0.5 text-sm text-slate-600">
