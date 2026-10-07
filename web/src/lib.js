@@ -118,9 +118,9 @@ onSessionExpired = () => useAuth.setState({ user: null, token: null });
 /* ------------------------------------------------------- DOMAIN HELPERS */
 
 export const URGENCY_STYLE = {
-  emergency: 'bg-red-100 text-red-800 ring-red-600/30',
-  urgent:    'bg-amber-100 text-amber-900 ring-amber-600/30',
-  routine:   'bg-slate-100 text-slate-700 ring-slate-500/30',
+  emergency: 'bg-danger-100 text-danger-800 ring-danger-500/30',
+  urgent:    'bg-ember-100 text-ember-700 ring-ember-500/30',
+  routine:   'bg-slate-100 text-slate-600 ring-slate-400/40',
 };
 
 /** Status groups drive colour. Never colour alone — always paired with text (NFR-USA-07). */
@@ -128,10 +128,11 @@ export function statusStyle(status) {
   if (status === 'CLOSED_COMPLETED') return 'bg-emerald-100 text-emerald-800 ring-emerald-600/30';
   if (status?.startsWith('CLOSED_')) return 'bg-slate-200 text-slate-700 ring-slate-500/30';
   if (['DECLINED', 'NOT_ARRIVED', 'ESCALATED', 'ACCEPTED_LAPSED'].includes(status))
-    return 'bg-red-100 text-red-800 ring-red-600/30';
+    return 'bg-danger-100 text-danger-800 ring-danger-500/30';
   if (['ACCEPTED', 'ARRIVED', 'IN_CARE', 'OUTCOME_RETURNED'].includes(status))
-    return 'bg-brand-100 text-brand-700 ring-brand-600/30';
-  return 'bg-blue-100 text-blue-800 ring-blue-600/30';
+    return 'bg-brand-100 text-brand-800 ring-brand-500/40';
+  // in-flight states stay on the brand teal rather than introducing a new hue
+  return 'bg-brand-50 text-brand-700 ring-brand-400/50';
 }
 
 export const humanStatus = (s) =>
@@ -143,8 +144,8 @@ export const humanCode = (s) =>
 
 export function slaLabel(mins) {
   if (mins === null || mins === undefined) return null;
-  if (mins < 0) return { text: `Overdue by ${Math.abs(mins)} min`, tone: 'text-red-700 font-semibold' };
-  if (mins < 10) return { text: `${mins} min left`, tone: 'text-amber-700 font-semibold' };
+  if (mins < 0) return { text: `Overdue by ${Math.abs(mins)} min`, tone: 'text-danger-700 font-semibold' };
+  if (mins < 10) return { text: `${mins} min left`, tone: 'text-ember-700 font-semibold' };
   return { text: `${mins} min left`, tone: 'text-slate-600' };
 }
 

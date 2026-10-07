@@ -1,22 +1,248 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   ETHIO REFERRAL LINKAGE — BRAND DESIGN SYSTEM
+   ----------------------------------------------------------------------------
+   Single source of truth for the visual layer. Every colour, radius, shadow,
+   font and motion value used anywhere in the app is defined here, so the whole
+   interface reads as one product. Nothing in this file contains logic.
+
+   Palette is taken directly from the EthioReferral Linkage logo:
+     primary teal        #4EB3BF   (--color-brand-500)
+     secondary light teal #9ED9DE  (--color-brand-300)
+     body / dark text    #263238   (--color-slate-900)
+     background          #F4FAFA   (--color-slate-100)
+     white               #FFFFFF
+   ========================================================================== */
+
 @theme {
-  /* Deep teal — calm, clinical, and distinct from alert colours */
-  --color-brand-50:  #eef7f6;
-  --color-brand-100: #d3ebe8;
-  --color-brand-200: #a7d7d1;
-  --color-brand-300: #74bdb5;
-  --color-brand-400: #47a199;
-  --color-brand-500: #0f766e;
-  --color-brand-600: #0d5f59;
-  --color-brand-700: #0a4a45;
-  --color-brand-800: #073632;
-  --color-ember-400: #f59e0b;
-  --color-ember-500: #d97706;
-  --color-danger-500:#dc2626;
-  --color-danger-50: #fef2f2;
+  /* ---------------------------------------------------------- primary teal */
+  /* brand-500 is the exact logo teal. brand-600 is a one-shade deepening of the
+     same hue: the only place it is used is a teal fill carrying white text, and
+     #4EB3BF + white measures 2.4:1. #2E7F89 measures 4.6:1 (WCAG AA) while
+     staying unmistakably the same logo hue. Accents, rings, rails, progress
+     fills and nodes all stay on the exact #4EB3BF. */
+  --color-brand-50:  #f1f8f9;
+  --color-brand-100: #e0f2f4;
+  --color-brand-200: #c1e5e8;
+  --color-brand-300: #9ed9de;  /* logo secondary */
+  --color-brand-400: #6bc5ce;
+  --color-brand-500: #4eb3bf;  /* logo primary */
+  --color-brand-600: #2e7f89;  /* AA-safe teal fill */
+  --color-brand-700: #256a73;
+  --color-brand-800: #1c545c;
+  --color-brand-900: #143e45;
+
+  /* ------------------------------------------------------------- neutrals */
+  /* The whole slate ramp is re-tinted toward the brand so borders, dividers and
+     muted text feel part of the teal system instead of a default grey UI.
+     Values only move enough to keep text contrast at or above the level the
+     default Tailwind ramp had. */
+  --color-slate-50:  #fafdfd;
+  --color-slate-100: #f4fafa;  /* logo background */
+  --color-slate-200: #e1eeee;
+  --color-slate-300: #c2dcdd;
+  --color-slate-400: #6e8789;
+  --color-slate-500: #4f6b6e;
+  --color-slate-600: #38585b;
+  --color-slate-700: #2a4a4d;
+  --color-slate-800: #1f3a3d;
+  --color-slate-900: #263238;  /* logo body text */
+  --color-slate-950: #16292c;
+
+  /* ---------------------------------------------------------- status ramps */
+  /* Kept deliberately small and muted so the teal stays dominant. */
+  --color-ember-50:  #fdf6ec;
+  --color-ember-100: #fbeacd;
+  --color-ember-200: #f5d59b;
+  --color-ember-400: #e2953a;
+  --color-ember-500: #b45309;  /* white text 5.0:1 */
+  --color-ember-600: #9a4707;
+  --color-ember-700: #7a3906;
+  --color-ember-800: #5d2b05;
+
+  --color-danger-50:  #fdf3f3;
+  --color-danger-100: #fbe3e3;
+  --color-danger-200: #f5c9c9;
+  --color-danger-400: #e05555;
+  --color-danger-500: #c62828;  /* white text 5.6:1 */
+  --color-danger-600: #a81f1f;
+  --color-danger-700: #871919;
+  --color-danger-800: #661414;
+
+  /* completed / positive — a muted clinical green, never a bright lime */
+  --color-emerald-50:  #eef7f1;
+  --color-emerald-100: #d6ede0;
+  --color-emerald-200: #b4dcc3;
+  --color-emerald-500: #2e8b57;  /* white text 4.8:1 */
+  --color-emerald-600: #22704a;
+  --color-emerald-700: #1b5e3a;
+  --color-emerald-800: #14532d;
+  --color-emerald-900: #0f3d22;
+
+  /* routing-override intelligence — one quiet violet, used sparingly */
+  --color-violet-50:  #f5f4fb;
+  --color-violet-100: #e8e6f6;
+  --color-violet-200: #d0cbea;
+  --color-violet-500: #6b5cb5;
+  --color-violet-600: #56479c;
+  --color-violet-700: #453a80;
+  --color-violet-800: #342c63;
+  --color-violet-900: #241f47;
+
+  --color-pink-100: #fbe4ec;
+  --color-pink-200: #f6c9d9;
+  --color-pink-600: #c02a6b;
+  --color-pink-700: #a8215a;
+
+  /* ------------------------------------------------------------ typography */
+  --font-sans: "Poppins", "Noto Sans Ethiopic", "Inter", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* one radius language across buttons, cards, fields and modals */
+  --radius-erl: 0.875rem;
+
+  /* soft, low-spread elevation — never a heavy drop shadow */
+  --shadow-erl-xs: 0 1px 2px rgb(38 50 56 / 0.05);
+  --shadow-erl-sm: 0 1px 2px rgb(38 50 56 / 0.05), 0 2px 8px -4px rgb(38 50 56 / 0.10);
+  --shadow-erl-md: 0 1px 2px rgb(38 50 56 / 0.05), 0 10px 24px -14px rgb(38 50 56 / 0.22);
+  --shadow-erl-lg: 0 2px 6px rgb(38 50 56 / 0.06), 0 24px 48px -20px rgb(38 50 56 / 0.30);
+  --shadow-erl-focus: 0 0 0 3px rgb(78 179 191 / 0.35);
+
+  /* subtle, professional motion only */
+  --ease-erl: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --animate-erl-rise: erl-rise 0.45s var(--ease-erl) both;
+  --animate-erl-fade: erl-fade 0.35s var(--ease-erl) both;
+  --animate-erl-flow: erl-flow 2.6s linear infinite;
 }
 
-/* NFR-USA-06: sunlight-readable, high contrast, 16px minimum body text */
-html { -webkit-text-size-adjust: 100%; }
-body { @apply bg-slate-100 text-slate-900 text-base antialiased; }
+@keyframes erl-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erl-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes erl-flow {
+  0%   { stroke-dashoffset: 44; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* ============================================================== BASELINE */
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+/* NFR-USA-06: sunlight-readable, high contrast, 16px minimum body text.
+   The whole document now runs on the brand neutral #263238 on #F4FAFA. */
+body {
+  @apply bg-slate-100 text-slate-900 antialiased;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: -0.003em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Consistent heading rhythm: tighter tracking at large sizes, tighter leading. */
+h1, h2, h3, h4 {
+  letter-spacing: -0.022em;
+  line-height: 1.18;
+  color: var(--color-slate-900);
+  text-wrap: balance;
+}
+p { text-wrap: pretty; }
+
+/* Numerals line up in stat tiles, tables, referral codes and timers. */
+.erl-nums { font-variant-numeric: tabular-nums; }
+
+/* One focus treatment for every interactive element on the platform. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* Scrollbars in the brand neutral instead of the OS default. */
+.erl-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-brand-200) transparent;
+}
+.erl-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.erl-scroll::-webkit-scrollbar-track { background: transparent; }
+.erl-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--color-brand-200);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.erl-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--color-brand-300); }
+
+/* ============================== CONNECTION VISUAL LANGUAGE =================
+   The logo marks a link between two points. The same idea appears, quietly,
+   as hairline rails, travelling nodes and rounded connection paths. Decorative
+   only — nothing here affects behaviour or contrast of the text beside it. */
+
+/* The brand's soft ambient wash used behind hero and auth surfaces. */
+.erl-aurora {
+  background-image:
+    radial-gradient(58rem 32rem at 12% -8%,  rgb(158 217 222 / 0.55), transparent 62%),
+    radial-gradient(46rem 28rem at 92% 6%,   rgb(78 179 191 / 0.28), transparent 60%),
+    radial-gradient(40rem 30rem at 68% 104%, rgb(158 217 222 / 0.42), transparent 62%);
+}
+
+/* Faint tiled geometric field — soft shapes, no visible seam. */
+.erl-grid {
+  background-image:
+    linear-gradient(to right, rgb(78 179 191 / 0.10) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(78 179 191 / 0.10) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 0%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(70% 60% at 50% 0%, #000 30%, transparent 100%);
+}
+
+/* The dashed teal connector that carries the connection motif. */
+.erl-rail {
+  background-image: linear-gradient(
+    to right,
+    var(--color-brand-300) 0 10px,
+    transparent 10px 20px
+  );
+  background-size: 20px 2px;
+  background-repeat: repeat-x;
+}
+
+/* A soft brand panel used to replace a flat colour block behind imagery. */
+.erl-photo-skeleton {
+  background-color: var(--color-brand-100);
+  background-image:
+    radial-gradient(28rem 20rem at 20% 15%, rgb(255 255 255 / 0.75), transparent 60%),
+    radial-gradient(24rem 18rem at 85% 85%, rgb(78 179 191 / 0.30), transparent 62%),
+    linear-gradient(140deg, var(--color-brand-200), var(--color-brand-100) 55%, #ffffff);
+}
+
+/* Hairline teal edge that marks a card as the currently relevant one. */
+.erl-edge { position: relative; }
+.erl-edge::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.75rem;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, var(--color-brand-400), var(--color-brand-600));
+}
+
+/* Respect the platform "reduce motion" setting everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -5,6 +5,7 @@ import {
   Button, Card, Field, Input, Textarea, ErrorBox, Modal, Spinner, Empty,
   UrgencyBadge, StatusBadge, Stars, StarInput,
 } from './ui';
+import { PageHead, Icon, LogoMark, ConnectionField } from './brand';
 
 /* Patient-friendly wording for the technical states */
 const PATIENT_STATUS = {
@@ -31,12 +32,19 @@ const PATIENT_STATUS = {
 function FacilityContact({ title, f }) {
   if (!f) return null;
   return (
-    <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-0.5 font-semibold text-slate-900">{f.name}</p>
+    <div className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/70">
+      <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600">
+        <Icon name={title === 'Referred from' ? 'building' : 'pin'} className="h-3.5 w-3.5" />
+        {title}
+      </p>
+      <p className="mt-1 font-semibold text-slate-900">{f.name}</p>
       {f.nameAm && <p className="text-sm text-slate-600">{f.nameAm}</p>}
       <p className="mt-1 text-sm text-slate-600">{[f.address, f.zone, f.region].filter(Boolean).join(', ')}</p>
-      {f.phone && <a href={`tel:${f.phone}`} className="mt-1 block text-sm font-medium text-brand-600">{f.phone}</a>}
+      {f.phone && (
+        <a href={`tel:${f.phone}`} className="erl-nums mt-1.5 inline-block text-sm font-semibold text-brand-600 hover:text-brand-700">
+          {f.phone}
+        </a>
+      )}
     </div>
   );
 }
@@ -59,61 +67,88 @@ function ReferralStatusCard({ r, onRate }) {
 
   return (
     <Card>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <UrgencyBadge urgency={r.urgency} />
         <StatusBadge status={r.status} />
-        <span className="ml-auto font-mono text-sm text-slate-500">{r.referral_code}</span>
+        <span className="erl-nums ml-auto font-mono text-sm font-semibold text-slate-500">{r.referral_code}</span>
       </div>
 
-      <h2 className="mt-2 text-lg font-bold text-slate-900">{t}</h2>
-      {hint && <p className="text-sm text-slate-600">{hint}</p>}
+      <h2 className="mt-3 text-lg font-semibold tracking-[-0.02em] text-slate-900">{t}</h2>
+      {hint && <p className="mt-1 text-sm leading-relaxed text-slate-600">{hint}</p>}
 
-      {/* parcel-style progress */}
-      <ol className="mt-4 flex items-center">
+      {/* parcel-style progress, drawn as connected nodes on the brand rail */}
+      <ol className="mt-5 flex items-start">
         {steps.map(([label, done], i) => (
-          <li key={label} className="flex flex-1 items-center">
-            <div className="flex flex-col items-center">
-              <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold
-                ${done ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+          <li key={label} className="flex flex-1 flex-col items-center">
+            <div className="flex w-full items-center">
+              {i > 0 && (
+                <span
+                  aria-hidden
+                  className={`h-0.5 flex-1 rounded-full transition-colors ${done ? 'bg-brand-400' : 'bg-slate-200'}`}
+                />
+              )}
+              <span
+                aria-hidden
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition
+                  ${done ? 'bg-brand-600 text-white ring-4 ring-brand-100'
+                    : 'bg-slate-200 text-slate-500 ring-4 ring-white'}`}
+              >
                 {done ? '✓' : i + 1}
               </span>
-              <span className={`mt-1 text-[10px] ${done ? 'font-medium text-brand-700' : 'text-slate-500'}`}>{label}</span>
+              {i < steps.length - 1 && (
+                <span
+                  aria-hidden
+                  className={`h-0.5 flex-1 rounded-full transition-colors ${steps[i + 1][1] ? 'bg-brand-400' : 'bg-slate-200'}`}
+                />
+              )}
             </div>
-            {i < steps.length - 1 && <div className={`mx-1 mb-4 h-0.5 flex-1 ${steps[i + 1][1] ? 'bg-brand-500' : 'bg-slate-200'}`} />}
+            <span className={`mt-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${
+              done ? 'text-brand-700' : 'text-slate-400'
+            }`}>
+              {label}
+            </span>
           </li>
         ))}
       </ol>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <FacilityContact title="Referred from" f={r.originFacility} />
         <FacilityContact title="Referred to" f={r.targetFacility} />
       </div>
 
       {r.receiving_clinician_name && (
-        <div className="mt-3 rounded-lg bg-brand-50 p-3 text-sm">
-          <p className="font-medium text-brand-700">Your receiving clinician</p>
-          <p>{r.receiving_clinician_name}{r.receiving_clinician_phone && ` · ${r.receiving_clinician_phone}`}</p>
-          {r.bed_reserved && <p className="mt-1 text-xs text-brand-700">A bed is reserved for you{r.reserved_ward_type && ` (${humanCode(r.reserved_ward_type)} ward)`}.</p>}
+        <div className="mt-3 rounded-xl bg-brand-50 p-3.5 text-sm ring-1 ring-brand-200">
+          <p className="font-semibold text-brand-800">Your receiving clinician</p>
+          <p className="mt-0.5 text-slate-700">
+            {r.receiving_clinician_name}{r.receiving_clinician_phone && ` · ${r.receiving_clinician_phone}`}
+          </p>
+          {r.bed_reserved && (
+            <p className="mt-1.5 text-xs font-medium leading-relaxed text-brand-700">
+              A bed is reserved for you{r.reserved_ward_type && ` (${humanCode(r.reserved_ward_type)} ward)`}.
+            </p>
+          )}
         </div>
       )}
 
       {r.outcome?.followUpInstructions && (
-        <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm ring-1 ring-emerald-200">
-          <p className="font-medium text-emerald-800">Your follow-up instructions</p>
-          <p className="text-emerald-900">{r.outcome.followUpInstructions}</p>
+        <div className="mt-3 rounded-xl bg-emerald-50 p-3.5 text-sm ring-1 ring-emerald-200">
+          <p className="font-semibold text-emerald-800">Your follow-up instructions</p>
+          <p className="mt-0.5 text-slate-700">{r.outcome.followUpInstructions}</p>
         </div>
       )}
 
-      <p className="mt-3 text-xs text-slate-500">Referred {formatDual(r.created_at)} · updated {timeAgo(r.updated_at)}</p>
+      <p className="mt-3.5 text-xs text-slate-500">
+        Referred {formatDual(r.created_at)} · updated {timeAgo(r.updated_at)}
+      </p>
 
       {r.feedbackEligible && onRate && (
-        <div className="mt-4 border-t border-slate-200 pt-3">
+        <div className="mt-4 border-t border-slate-200 pt-4">
           {rated ? (
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <span className="text-slate-600">Your ratings:</span>
               <span>{r.originFacility?.name?.split(' ')[0]} <Stars value={myOrigin.rating} showValue={false} /></span>
               <span>{r.targetFacility?.name?.split(' ')[0]} <Stars value={myTarget.rating} showValue={false} /></span>
-              <button onClick={() => onRate(r)} className="text-brand-600 underline">edit</button>
+              <button onClick={() => onRate(r)} className="font-semibold text-brand-600 underline underline-offset-4 hover:text-brand-700">edit</button>
             </div>
           ) : (
             <Button onClick={() => onRate(r)} className="w-full sm:w-auto">
@@ -156,16 +191,16 @@ function RateModal({ r, onClose, onSaved }) {
           Your rating is anonymous to the hospitals and is used by health bureaus to
           improve referral quality.
         </p>
-        <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-          <p className="text-sm font-medium text-slate-800">{r?.originFacility?.name}</p>
-          <p className="text-xs text-slate-500">The facility that referred you</p>
+        <div className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/70">
+          <p className="text-sm font-semibold text-slate-800">{r?.originFacility?.name}</p>
+          <p className="mt-0.5 text-xs text-slate-500">The facility that referred you</p>
           <div className="mt-2"><StarInput value={originRating} onChange={setOriginRating} /></div>
           <Textarea rows={2} className="mt-2" placeholder="Optional comment…"
                     value={originComment} onChange={(e) => setOriginComment(e.target.value)} />
         </div>
-        <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-          <p className="text-sm font-medium text-slate-800">{r?.targetFacility?.name}</p>
-          <p className="text-xs text-slate-500">The facility that received and treated you</p>
+        <div className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/70">
+          <p className="text-sm font-semibold text-slate-800">{r?.targetFacility?.name}</p>
+          <p className="mt-0.5 text-xs text-slate-500">The facility that received and treated you</p>
           <div className="mt-2"><StarInput value={targetRating} onChange={setTargetRating} /></div>
           <Textarea rows={2} className="mt-2" placeholder="Optional comment…"
                     value={targetComment} onChange={(e) => setTargetComment(e.target.value)} />
@@ -192,18 +227,19 @@ export default function PatientPortal() {
   if (!data) return <Spinner />;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <div>
-        <h1 className="text-xl font-bold">Selam, {data.patient?.name?.split(' ')[0]} 👋</h1>
-        <p className="text-sm text-slate-500">Track your referrals and rate the care you received.</p>
-      </div>
+    <div className="mx-auto max-w-3xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow="Patient portal"
+        title={`Selam, ${data.patient?.name?.split(' ')[0]} 👋`}
+        lede="Track your referrals and rate the care you received."
+      />
       {data.referrals.length === 0 && <Card><Empty>No referrals on record for you.</Empty></Card>}
       {data.referrals.map((r) => (
         <ReferralStatusCard key={r.id} r={r} onRate={setRating} />
       ))}
       <RateModal r={rating} onClose={() => setRating(null)}
                  onSaved={() => { setRating(null); loadAll(); }} />
-      <p className="text-center text-xs text-slate-400">
+      <p className="rounded-xl bg-white p-3.5 text-center text-xs leading-relaxed text-slate-500 shadow-erl-xs ring-1 ring-brand-200/60">
         In an emergency call 907 (ambulance) — this portal does not replace emergency services.
       </p>
     </div>
@@ -227,24 +263,33 @@ export function TrackReferral() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <div className="bg-brand-700 py-4 text-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4">
-          <Link to="/" className="font-bold">Ethio Referral Linkage</Link>
-          <Link to="/login" className="text-sm text-brand-100 hover:text-white">Staff sign in</Link>
+      <div className="relative isolate overflow-hidden bg-gradient-to-br from-brand-800 via-brand-700 to-brand-600 text-white">
+        <div aria-hidden="true" className="erl-grid absolute inset-0 opacity-70" />
+        <div aria-hidden="true" className="absolute inset-0 opacity-40">
+          <ConnectionField className="h-full w-full" nodes={6} seed={7} />
+        </div>
+        <div className="relative mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-4">
+          <Link to="/" className="flex items-center gap-2.5">
+            <LogoMark className="h-9 w-9" />
+            <span className="text-[15px] font-semibold tracking-[-0.02em]">Ethio Referral Linkage</span>
+          </Link>
+          <Link to="/login" className="rounded-xl px-3 py-2 text-sm font-semibold text-brand-100 transition hover:bg-white/10 hover:text-white">
+            Staff sign in
+          </Link>
         </div>
       </div>
-      <div className="mx-auto max-w-3xl space-y-4 p-4 py-8">
+      <div className="mx-auto max-w-3xl space-y-5 p-4 py-8 sm:py-10">
         <Card title="Track your referral" subtitle="Use the referral code you were given (also sent by SMS) and your phone number">
-          <form onSubmit={lookup} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <form onSubmit={lookup} className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <Field label="Referral code"><Input placeholder="ERL-XXXX-XX" value={code}
                    onChange={(e) => setCode(e.target.value)} autoCapitalize="characters" /></Field>
             <Field label="Phone number"><Input placeholder="+2519…" value={phone}
                    onChange={(e) => setPhone(e.target.value)} inputMode="tel" /></Field>
-            <div className="flex items-end"><Button type="submit" disabled={busy || !code || !phone} className="w-full">
+            <div className="flex"><Button type="submit" disabled={busy || !code || !phone} className="w-full">
               {busy ? 'Checking…' : 'Track'}
             </Button></div>
           </form>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-3 border-t border-slate-200 pt-3 text-xs leading-relaxed text-slate-500">
             Pilot demo: referral code <span className="font-mono">ERL-K7PM-42</span> with phone{' '}
             <span className="font-mono">0912000001</span> (Abeba Kassahun).
           </p>
@@ -252,8 +297,9 @@ export function TrackReferral() {
         <ErrorBox error={error} onDismiss={() => setError(null)} />
         {r && <ReferralStatusCard r={r} onRate={null} />}
         {r && (
-          <p className="text-center text-sm text-slate-500">
-            Patients with a portal account can also <Link to="/login" className="font-medium text-brand-600">sign in</Link> to
+          <p className="rounded-xl bg-white p-3.5 text-center text-sm leading-relaxed text-slate-600 shadow-erl-xs ring-1 ring-brand-200/60">
+            Patients with a portal account can also{' '}
+            <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">sign in</Link> to
             rate the hospitals after treatment.
           </p>
         )}

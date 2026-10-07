@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get, post, ApiError, useAuth, humanCode } from './lib';
 import {
-  Button, Card, Field, Input, Select, Textarea, ErrorBox, Badge,
-  UrgencyBadge, Spinner, inputCls, FileUpload, AttachmentList,
+  Button, Card, Field, Input, Select, Textarea, ErrorBox, Badge, Notice,
+  UrgencyBadge, Spinner, inputCls, FileUpload, AttachmentList, checkCls,
 } from './ui';
+import { PageHead, SectionLabel, Icon, IconTile } from './brand';
 
 const STEPS = ['Patient', 'Clinical', 'Destination', 'Confirm'];
 
@@ -125,19 +126,45 @@ export default function NewReferral() {
   const num = (v) => (v === '' || v === null || v === undefined ? undefined : Number(v));
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">New referral</h1>
-        <p className="text-sm text-slate-500">From {user?.facilityName}</p>
-      </div>
+    <div className="mx-auto max-w-3xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow="Guided referral"
+        title="New referral"
+        lede={`From ${user?.facilityName}`}
+      />
 
-      <ol className="flex gap-1">
-        {STEPS.map((s, i) => (
-          <li key={s} className="flex-1">
-            <div className={`h-1.5 rounded-full ${i <= step ? 'bg-brand-500' : 'bg-slate-300'}`} />
-            <p className={`mt-1 text-xs ${i === step ? 'font-semibold text-brand-700' : 'text-slate-500'}`}>{s}</p>
-          </li>
-        ))}
+      {/* the wizard: connected nodes, joined by the brand rail */}
+      <ol className="flex gap-2" aria-label="Referral wizard progress">
+        {STEPS.map((s, i) => {
+          const done = i < step;
+          const current = i === step;
+          return (
+            <li key={s} className="flex-1">
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition
+                    ${current ? 'bg-brand-600 text-white ring-4 ring-brand-100'
+                      : done ? 'bg-brand-200 text-brand-800'
+                      : 'bg-slate-200 text-slate-500'}`}
+                >
+                  {done ? '✓' : i + 1}
+                </span>
+                {i < STEPS.length - 1 && (
+                  <span
+                    aria-hidden
+                    className={`h-0.5 flex-1 rounded-full transition-colors ${done ? 'bg-brand-400' : 'bg-slate-200'}`}
+                  />
+                )}
+              </div>
+              <p className={`mt-1.5 truncate text-[11px] font-semibold uppercase tracking-[0.08em] ${
+                current ? 'text-brand-700' : done ? 'text-brand-600' : 'text-slate-400'
+              }`}>
+                {s}
+              </p>
+            </li>
+          );
+        })}
       </ol>
 
       <ErrorBox error={error} onDismiss={() => setError(null)} />
@@ -153,18 +180,27 @@ export default function NewReferral() {
               <Button variant="ghost" onClick={doSearch}>Search</Button>
             </div>
             {results && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-4 space-y-2">
                 {results.length === 0 && <p className="text-sm text-slate-500">No match — register below.</p>}
                 {results.map((p) => (
                   <button key={p.id} onClick={() => { setPatient(p); setStep(1); }}
-                          className="flex w-full items-center justify-between rounded-lg p-3 text-left ring-1 ring-slate-200 hover:bg-brand-50">
-                    <div>
-                      <p className="font-medium">{p.name} {p.nameAm && <span className="text-slate-500">· {p.nameAm}</span>}</p>
-                      <p className="text-sm text-slate-500">{p.sex}, {p.age}</p>
+                          className="flex w-full items-center justify-between gap-3 rounded-xl bg-white p-3.5 text-left ring-1 ring-slate-200 transition hover:bg-brand-50 hover:ring-brand-300">
+                    <div className="flex min-w-0 gap-3">
+                      <IconTile name="people" box="h-9 w-9" className="h-4.5 w-4.5" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900">
+                          {p.name} {p.nameAm && <span className="font-normal text-slate-500">· {p.nameAm}</span>}
+                        </p>
+                        <p className="mt-0.5 text-sm text-slate-500">{p.sex}, {p.age}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      {p.requiresReview && <Badge className="bg-amber-100 text-amber-900 ring-amber-600/30">Review match</Badge>}
-                      <p className="mt-1 text-xs text-slate-400">{Math.round(p.matchConfidence * 100)}% match</p>
+                    <div className="shrink-0 text-right">
+                      {p.requiresReview && (
+                        <Badge className="bg-ember-100 text-ember-700 ring-ember-500/30">Review match</Badge>
+                      )}
+                      <p className="erl-nums mt-1 text-xs text-slate-400">
+                        {Math.round(p.matchConfidence * 100)}% match
+                      </p>
                     </div>
                   </button>
                 ))}
@@ -210,14 +246,14 @@ export default function NewReferral() {
                 </Select>
               </Field>
             </div>
-            <div className="mt-3 flex gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="h-5 w-5 rounded" checked={form.cbhiMember}
+            <div className="mt-4 flex flex-wrap gap-5">
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-slate-700">
+                <input type="checkbox" className={checkCls} checked={form.cbhiMember}
                        onChange={(e) => setForm({ ...form, cbhiMember: e.target.checked })} />
                 CBHI member
               </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="h-5 w-5 rounded" checked={form.isPregnant}
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-slate-700">
+                <input type="checkbox" className={checkCls} checked={form.isPregnant}
                        onChange={(e) => setForm({ ...form, isPregnant: e.target.checked })} />
                 Pregnant
               </label>
@@ -244,20 +280,20 @@ export default function NewReferral() {
               </Select>
             </Field>
             {reason && (
-              <div className="mt-3 rounded-lg bg-brand-50 p-3">
+              <div className="mt-4 rounded-xl bg-brand-50 p-3.5 ring-1 ring-brand-200">
                 <div className="flex items-center gap-2">
                   <UrgencyBadge urgency={urgency} />
                   <span className="text-sm text-slate-600">auto-set from reason</span>
                 </div>
-                <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-600">Required capabilities</p>
-                <div className="mt-1 flex flex-wrap gap-1">
+                <SectionLabel className="mt-3">Required capabilities</SectionLabel>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {reason.required_capabilities.map((c) => (
-                    <Badge key={c} className="bg-white text-brand-700 ring-brand-600/30">{humanCode(c)}</Badge>
+                    <Badge key={c} className="bg-white text-brand-700 ring-brand-400/50">{humanCode(c)}</Badge>
                   ))}
                 </div>
               </div>
             )}
-            <div className="mt-3 grid gap-3">
+            <div className="mt-4 grid gap-4">
               <Field label="Provisional diagnosis" required>
                 <Input value={clinical.provisionalDiagnosis}
                        onChange={(e) => setClinical({ ...clinical, provisionalDiagnosis: e.target.value })} />
@@ -291,16 +327,16 @@ export default function NewReferral() {
                 </Field>
               )}
             </div>
-            <label className="mt-3 flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-0.5 h-5 w-5 rounded" checked={clinical.emergencyOverride}
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl bg-slate-50 p-3 text-sm font-medium text-slate-700 ring-1 ring-slate-200/80">
+              <input type="checkbox" className={`${checkCls} mt-0.5`} checked={clinical.emergencyOverride}
                      onChange={(e) => setClinical({ ...clinical, emergencyOverride: e.target.checked })} />
               <span>Emergency override — patient too unstable to complete vitals</span>
             </label>
             {clinical.emergencyOverride && (
-              <div className="mt-2">
+              <div className="mt-3">
                 <Input placeholder="Reason for override (required)" value={clinical.emergencyOverrideReason}
                        onChange={(e) => setClinical({ ...clinical, emergencyOverrideReason: e.target.value })} />
-                <p className="mt-1 text-xs text-amber-700">
+                <p className="mt-1.5 text-xs font-medium leading-relaxed text-ember-700">
                   Overrides are tracked. If they exceed ~15% of routine referrals the workflow needs redesign.
                 </p>
               </div>
@@ -309,10 +345,11 @@ export default function NewReferral() {
 
           {reason?.stabilisation_items?.length > 0 && (
             <Card title="Pre-referral stabilisation" subtitle="Tailored to the reason code">
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {reason.stabilisation_items.map((item) => (
-                  <label key={item} className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" className="mt-0.5 h-5 w-5 rounded"
+                  <label key={item}
+                         className="flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-brand-50/60">
+                    <input type="checkbox" className={`${checkCls} mt-0.5`}
                            checked={stabilisation.includes(item)}
                            onChange={(e) => setStabilisation(e.target.checked
                              ? [...stabilisation, item] : stabilisation.filter((s) => s !== item))} />
@@ -320,10 +357,12 @@ export default function NewReferral() {
                   </label>
                 ))}
               </div>
-              <Field label="Treatment given (drug, dose, route, time)" hint="The receiving team restarts the workup without this">
-                <Textarea rows={2} className="mt-2" value={treatmentGiven}
-                          onChange={(e) => setTreatmentGiven(e.target.value)} />
-              </Field>
+              <div className="mt-3">
+                <Field label="Treatment given (drug, dose, route, time)" hint="The receiving team restarts the workup without this">
+                  <Textarea rows={2} value={treatmentGiven}
+                            onChange={(e) => setTreatmentGiven(e.target.value)} />
+                </Field>
+              </div>
             </Card>
           )}
 
@@ -351,43 +390,49 @@ export default function NewReferral() {
           <Card title="Facilities that can treat this patient"
                 subtitle={`Ranked by capability, distance, acceptance history and free beds`}>
             {routing.candidates.length === 0 && (
-              <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              <Notice tone="warn" icon={<Icon name="clock" />}>
                 No facility has every required capability. Review the excluded list below and choose the best partial match.
-              </p>
+              </Notice>
             )}
-            <div className="space-y-2">
+            <div className="mt-4 space-y-2.5">
               {routing.candidates.map((c, i) => (
                 <button key={c.facilityId} onClick={() => setChosen(c)}
-                        className={`w-full rounded-lg p-3 text-left ring-2 transition
-                          ${chosen?.facilityId === c.facilityId ? 'bg-brand-50 ring-brand-500' : 'bg-white ring-slate-200 hover:ring-slate-300'}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {i === 0 && <Badge className="mr-2 bg-brand-500 text-white ring-brand-600">Best match</Badge>}
-                        {c.name}
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        {c.distanceKm} km · ~{c.estimatedTravelMinutes} min · {humanCode(c.facilityType)}
-                      </p>
+                        className={`w-full rounded-xl p-4 text-left ring-2 transition
+                          ${chosen?.facilityId === c.facilityId
+                            ? 'bg-brand-50 ring-brand-500'
+                            : 'bg-white ring-slate-200 hover:ring-brand-300'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 gap-3">
+                      <IconTile name="building" box="h-9 w-9" className="h-4.5 w-4.5" />
+                      <div className="min-w-0">
+                        <p className="font-semibold tracking-[-0.015em] text-slate-900">
+                          {i === 0 && <Badge className="mr-2 bg-brand-600 text-white ring-brand-700">Best match</Badge>}
+                          {c.name}
+                        </p>
+                        <p className="mt-0.5 text-sm text-slate-600">
+                          {c.distanceKm} km · ~{c.estimatedTravelMinutes} min · {humanCode(c.facilityType)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right text-sm">
-                      <p className={c.bedsFree > 0 ? 'font-semibold text-brand-700' : 'text-red-700'}>
+                    <div className="erl-nums shrink-0 text-right text-sm">
+                      <p className={`font-semibold ${c.bedsFree > 0 ? 'text-brand-700' : 'text-danger-700'}`}>
                         {c.bedsFree ?? '?'} beds free
                       </p>
-                      {c.bedsStale && <p className="text-xs text-amber-700">reported &gt;8 h ago</p>}
+                      {c.bedsStale && <p className="mt-0.5 text-xs font-medium text-ember-700">reported &gt;8 h ago</p>}
                     </div>
                   </div>
                   {/* Operational signals only. Patient feedback is not shown to
                       clinicians — it belongs to each hospital's IT/quality view. */}
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <span>{Math.round(c.acceptanceRate * 100)}% acceptance</span>
-                    <span>· {c.queueDepth} waiting</span>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-2.5 text-xs text-slate-500">
+                    <span className="erl-nums font-medium">{Math.round(c.acceptanceRate * 100)}% acceptance</span>
+                    <span aria-hidden className="text-brand-300">·</span>
+                    <span className="erl-nums">{c.queueDepth} waiting</span>
                     {c.is24h && <span>· 24 h</span>}
                     {c.hasAmbulance && <span>· ambulance</span>}
                     {c.staleCapabilities.length > 0 &&
-                      <span className="text-amber-700">· {c.staleCapabilities.length} capability check overdue</span>}
+                      <span className="font-medium text-ember-700">· {c.staleCapabilities.length} capability check overdue</span>}
                   </div>
-                  {c.phone && <p className="mt-1 text-xs text-slate-400">{c.phone}</p>}
+                  {c.phone && <p className="erl-nums mt-1.5 text-xs text-slate-400">{c.phone}</p>}
                 </button>
               ))}
             </div>
@@ -396,22 +441,22 @@ export default function NewReferral() {
           {/* This is the moat, rendered. Never hide an excluded facility. */}
           {routing.excluded.length > 0 && (
             <Card title="Not available for this patient" subtitle="Shown so you can see why, not hidden">
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {routing.excluded.map((c) => (
-                  <div key={c.facilityId} className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-slate-700">{c.name}</p>
-                      <p className="text-sm text-slate-500">{c.distanceKm} km</p>
+                  <div key={c.facilityId} className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/70">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold text-slate-700">{c.name}</p>
+                      <p className="erl-nums shrink-0 text-sm text-slate-500">{c.distanceKm} km</p>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {c.missingCapabilities.map((m) => (
-                        <Badge key={m.code} className="bg-red-50 text-red-800 ring-red-200">
+                        <Badge key={m.code} className="bg-danger-50 text-danger-800 ring-danger-200">
                           {humanCode(m.code)}: {m.status}
                         </Badge>
                       ))}
                     </div>
                     {c.missingCapabilities.find((m) => m.note) && (
-                      <p className="mt-1 text-sm text-red-700">
+                      <p className="mt-2 text-sm font-medium text-danger-700">
                         {c.missingCapabilities.find((m) => m.note).note}
                       </p>
                     )}

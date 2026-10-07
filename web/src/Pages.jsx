@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { get, post, put, useAuth, humanCode, humanStatus, slaLabel, timeAgo, formatDual } from './lib';
 import {
-  Button, Card, Field, Input, Select, Textarea, ErrorBox, Badge, Modal,
-  UrgencyBadge, StatusBadge, Stat, Spinner, Empty, Stars, FileUpload, AttachmentList,
+  Button, Card, Field, Input, Select, Textarea, ErrorBox, Badge, Modal, Notice,
+  UrgencyBadge, StatusBadge, Stat, Spinner, Empty, Stars, FileUpload, AttachmentList, checkCls,
 } from './ui';
+import { PageHead, SectionLabel, Icon, IconTile, Photo, FlowPulse } from './brand';
 
 /* ==================================================== REFERRAL LIST */
 export function ReferralList() {
@@ -26,41 +27,47 @@ export function ReferralList() {
   const unassigned = (rows || []).filter((r) => r.awaitingAssignment);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Referrals</h1>
-        {senderRole && <Link to="/new"><Button>+ New referral</Button></Link>}
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow="Referral exchange"
+        title="Referrals"
+        actions={senderRole && <Link to="/new"><Button>+ New referral</Button></Link>}
+      />
 
       {isReception && unassigned.length > 0 && dir !== 'outbound' && (
-        <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
-          <p className="font-semibold text-amber-900">
+        <Notice tone="warn" icon={<Icon name="clock" />}>
+          <p className="font-semibold">
             {unassigned.length} referral{unassigned.length === 1 ? '' : 's'} waiting at reception
           </p>
-          <p className="mt-0.5 text-sm text-amber-800">
+          <p className="mt-0.5">
             No clinician is responsible for {unassigned.length === 1 ? 'this patient' : 'these patients'} yet.
             Open each one and assign the doctor or specialist who should treat them.
           </p>
-        </div>
+        </Notice>
       )}
 
       {senderRole && rows?.some((r) => r.assignedToMe) && dir !== 'outbound' && (
-        <div className="rounded-xl bg-brand-50 p-4 ring-1 ring-brand-200">
-          <p className="font-semibold text-brand-800">
+        <Notice tone="brand" icon={<Icon name="shield" />}>
+          <p className="font-semibold">
             {rows.filter((r) => r.assignedToMe).length} case
             {rows.filter((r) => r.assignedToMe).length === 1 ? '' : 's'} assigned to you
           </p>
-          <p className="mt-0.5 text-sm text-brand-700">
+          <p className="mt-0.5">
             Reception has made you responsible for these patients — respond as soon as you can.
           </p>
-        </div>
+        </Notice>
       )}
 
-      <div className="flex gap-1 rounded-lg bg-slate-200 p-1">
+      {/* segmented control */}
+      <div className="inline-flex w-full gap-1 rounded-xl bg-white p-1 shadow-erl-xs ring-1 ring-brand-200/60 sm:w-auto">
         {tabs.map(([k, l]) => (
-          <button key={k} onClick={() => setDir(k)}
-                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition
-                    ${dir === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>
+          <button
+            key={k} onClick={() => setDir(k)}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition sm:flex-none
+              ${dir === k
+                ? 'bg-brand-600 text-white shadow-erl-xs'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-700'}`}
+          >
             {l}
           </button>
         ))}
@@ -69,52 +76,64 @@ export function ReferralList() {
       <ErrorBox error={error} onDismiss={() => setError(null)} />
 
       {senderRole && dir === 'inbound' && rows?.length === 0 && (
-        <p className="text-center text-sm text-slate-500">
+        <Notice tone="brand" icon={<Icon name="route" />}>
           Inbound cases appear here once your hospital's referral reception assigns one to you.
-        </p>
+        </Notice>
       )}
 
       {!rows ? <Spinner /> : rows.length === 0 ? (
         <Card><Empty>No referrals here yet.</Empty></Card>
       ) : (
-        <div className="space-y-2">
+        <ul className="space-y-2.5">
           {rows.map((r) => {
             const sla = slaLabel(r.slaRemainingMinutes);
             return (
-              <Link key={r.id} to={`/referrals/${r.id}`}
-                    className="block rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 hover:ring-brand-400">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <UrgencyBadge urgency={r.urgency} />
-                      <StatusBadge status={r.status} />
-                      {r.awaitingAssignment && (
-                        <Badge className="bg-amber-100 text-amber-900 ring-amber-600/30">Needs assignment</Badge>
-                      )}
-                      {r.assignedToMe && (
-                        <Badge className="bg-brand-100 text-brand-700 ring-brand-600/30">Assigned to you</Badge>
-                      )}
-                      {r.attachmentCount > 0 && (
-                        <span className="text-xs text-slate-500" title="Attachments">🩻 {r.attachmentCount}</span>
-                      )}
+              <li key={r.id}>
+                <Link
+                  to={`/referrals/${r.id}`}
+                  className="group block rounded-2xl bg-white p-4 shadow-erl-sm ring-1 ring-brand-200/60
+                             transition hover:-translate-y-px hover:shadow-erl-md hover:ring-brand-300"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <UrgencyBadge urgency={r.urgency} />
+                        <StatusBadge status={r.status} />
+                        {r.awaitingAssignment && (
+                          <Badge className="bg-ember-100 text-ember-700 ring-ember-500/30">Needs assignment</Badge>
+                        )}
+                        {r.assignedToMe && (
+                          <Badge className="bg-brand-100 text-brand-800 ring-brand-500/40">Assigned to you</Badge>
+                        )}
+                        {r.attachmentCount > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+                            🩻 {r.attachmentCount}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 font-semibold tracking-[-0.015em] text-slate-900">
+                        {r.patientName}{' '}
+                        <span className="font-normal text-slate-500">· {r.sex}, {r.patientAge}</span>
+                      </p>
+                      <p className="truncate text-sm text-slate-600">{r.provisional_diagnosis}</p>
+                      <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <span>{r.origin_facility_name}</span>
+                        <span aria-hidden className="text-brand-400">→</span>
+                        <span className="text-brand-700">{r.target_facility_name}</span>
+                        {r.assigned_doctor_name && !r.assignedToMe && ` · ${r.assigned_doctor_name}`}
+                      </p>
                     </div>
-                    <p className="mt-1.5 font-semibold text-slate-900">{r.patientName} <span className="font-normal text-slate-500">· {r.sex}, {r.patientAge}</span></p>
-                    <p className="truncate text-sm text-slate-600">{r.provisional_diagnosis}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {r.origin_facility_name} → {r.target_facility_name}
-                      {r.assigned_doctor_name && !r.assignedToMe && ` · ${r.assigned_doctor_name}`}
-                    </p>
+                    <div className="erl-nums shrink-0 text-right">
+                      <p className="font-mono text-xs font-semibold text-slate-500">{r.referral_code}</p>
+                      <p className="mt-1 text-xs text-slate-500">{timeAgo(r.created_at)}</p>
+                      {sla && <p className={`mt-1 text-xs ${sla.tone}`}>{sla.text}</p>}
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="font-mono text-xs text-slate-500">{r.referral_code}</p>
-                    <p className="mt-1 text-xs text-slate-500">{timeAgo(r.created_at)}</p>
-                    {sla && <p className={`mt-1 text-xs ${sla.tone}`}>{sla.text}</p>}
-                  </div>
-                </div>
-              </Link>
+                </Link>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -129,26 +148,42 @@ function SenderCard({ r }) {
   if (!f) return null;
   return (
     <Card title="Referred by" subtitle="Verified sender — registered to this facility by its IT administrator">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Clinician</p>
-          <p className="mt-1 font-semibold text-slate-900">{u?.name}</p>
-          {u?.title && <p className="text-sm text-slate-600">{u.title}</p>}
-          <div className="mt-1 space-y-0.5 text-sm text-slate-600">
-            {u?.licenseNumber && <p>MoH license: <span className="font-mono">{u.licenseNumber}</span></p>}
-            {u?.role && <p>Role: {humanCode(u.role)}{u.department ? ` · ${u.department}` : ''}</p>}
-            {u?.phone && <p>Direct line: <a className="font-medium text-brand-600" href={`tel:${u.phone}`}>{u.phone}</a></p>}
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div className="flex gap-3">
+          <IconTile name="stethoscope" box="h-9 w-9" className="h-4.5 w-4.5" />
+          <div className="min-w-0">
+            <SectionLabel>Clinician</SectionLabel>
+            <p className="mt-1 font-semibold text-slate-900">{u?.name}</p>
+            {u?.title && <p className="text-sm text-slate-600">{u.title}</p>}
+            <div className="mt-1.5 space-y-0.5 text-sm text-slate-600">
+              {u?.licenseNumber && <p>MoH license: <span className="font-mono">{u.licenseNumber}</span></p>}
+              {u?.role && <p>Role: {humanCode(u.role)}{u.department ? ` · ${u.department}` : ''}</p>}
+              {u?.phone && (
+                <p>
+                  Direct line:{' '}
+                  <a className="font-semibold text-brand-600 hover:text-brand-700" href={`tel:${u.phone}`}>{u.phone}</a>
+                </p>
+              )}
+            </div>
           </div>
         </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Facility</p>
-          <p className="mt-1 font-semibold text-slate-900">{f.name}</p>
-          {f.nameAm && <p className="text-sm text-slate-600">{f.nameAm}</p>}
-          <div className="mt-1 space-y-0.5 text-sm text-slate-600">
-            <p>{humanCode(f.type)} · tier {f.tier}</p>
-            <p>{[f.address, f.woreda, f.zone, f.region].filter(Boolean).join(', ')}</p>
-            {f.poBox && f.poBox !== '—' && <p>{f.poBox}</p>}
-            {f.phone && <p>Switchboard: <a className="font-medium text-brand-600" href={`tel:${f.phone}`}>{f.phone}</a></p>}
+        <div className="flex gap-3">
+          <IconTile name="building" box="h-9 w-9" className="h-4.5 w-4.5" />
+          <div className="min-w-0">
+            <SectionLabel>Facility</SectionLabel>
+            <p className="mt-1 font-semibold text-slate-900">{f.name}</p>
+            {f.nameAm && <p className="text-sm text-slate-600">{f.nameAm}</p>}
+            <div className="mt-1.5 space-y-0.5 text-sm text-slate-600">
+              <p>{humanCode(f.type)} · tier {f.tier}</p>
+              <p>{[f.address, f.woreda, f.zone, f.region].filter(Boolean).join(', ')}</p>
+              {f.poBox && f.poBox !== '—' && <p>{f.poBox}</p>}
+              {f.phone && (
+                <p>
+                  Switchboard:{' '}
+                  <a className="font-semibold text-brand-600 hover:text-brand-700" href={`tel:${f.phone}`}>{f.phone}</a>
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -199,23 +234,21 @@ function AssignmentCard({ r, onAssigned }) {
               </Button>
             )}>
         {a ? (
-          <div className="rounded-lg bg-brand-50 p-3">
-            <p className="font-semibold text-brand-800">{a.doctorName}
+          <div className="rounded-xl bg-brand-50 p-4 ring-1 ring-brand-200">
+            <p className="font-semibold text-brand-800">
+              {a.doctorName}
               {a.isMine && <Badge className="ml-2 bg-brand-600 text-white ring-brand-700">Assigned to you</Badge>}
             </p>
-            <p className="mt-0.5 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-slate-600">
               Assigned by {a.assignedByName} · {timeAgo(a.assignedAt)}
             </p>
-            {a.note && <p className="mt-1 text-sm text-slate-700">“{a.note}”</p>}
+            {a.note && <p className="mt-1.5 text-sm text-slate-700">“{a.note}”</p>}
           </div>
         ) : (
-          <div className="rounded-lg bg-amber-50 p-3 ring-1 ring-amber-200">
-            <p className="font-medium text-amber-900">Awaiting assignment</p>
-            <p className="text-sm text-amber-800">
-              No clinician is responsible for this patient yet. Most referrals need a
-              particular specialty — assign the right one so they can open the case.
-            </p>
-          </div>
+          <Notice tone="warn" icon={<Icon name="clock" />} title="Awaiting assignment">
+            No clinician is responsible for this patient yet. Most referrals need a
+            particular specialty — assign the right one so they can open the case.
+          </Notice>
         )}
       </Card>
 
@@ -230,22 +263,29 @@ function AssignmentCard({ r, onAssigned }) {
           {!clinicians ? <Spinner /> : clinicians.length === 0 ? (
             <Empty>No active clinicians are registered at this facility yet — the IT administrator adds them.</Empty>
           ) : (
-            <div className="max-h-80 space-y-2 overflow-y-auto">
+            <div className="max-h-80 space-y-2 overflow-y-auto erl-scroll">
               {clinicians.map((c) => (
                 <button key={c.id} type="button" onClick={() => setChosen(c.id)}
-                        className={`w-full rounded-lg p-3 text-left ring-2 transition
-                          ${chosen === c.id ? 'bg-brand-50 ring-brand-500' : 'bg-white ring-slate-200 hover:ring-slate-300'}`}>
+                        className={`w-full rounded-xl p-3.5 text-left ring-2 transition
+                          ${chosen === c.id
+                            ? 'bg-brand-50 ring-brand-500'
+                            : 'bg-white ring-slate-200 hover:ring-brand-300'}`}>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900">{c.fullName}</p>
-                      <p className="text-sm text-slate-600">
-                        {c.title || humanCode(c.role)}{c.department ? ` · ${c.department}` : ''}
-                      </p>
-                      {c.licenseNumber && (
-                        <p className="text-xs text-slate-500">Licence <span className="font-mono">{c.licenseNumber}</span></p>
-                      )}
+                    <div className="flex min-w-0 gap-3">
+                      <IconTile name="nurse" box="h-9 w-9" className="h-4.5 w-4.5" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900">{c.fullName}</p>
+                        <p className="mt-0.5 text-sm text-slate-600">
+                          {c.title || humanCode(c.role)}{c.department ? ` · ${c.department}` : ''}
+                        </p>
+                        {c.licenseNumber && (
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Licence <span className="font-mono">{c.licenseNumber}</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <span className={`shrink-0 text-xs ${c.activeCases > 4 ? 'text-amber-700' : 'text-slate-500'}`}>
+                    <span className={`erl-nums shrink-0 text-xs font-medium ${c.activeCases > 4 ? 'text-ember-700' : 'text-slate-500'}`}>
                       {c.activeCases} open case{c.activeCases === 1 ? '' : 's'}
                     </span>
                   </div>
@@ -309,8 +349,10 @@ export function ReferralDetail() {
   if (!r && error?.status === 403) {
     const d = error.detail || {};
     return (
-      <div className="mx-auto max-w-2xl space-y-4 p-4">
-        <Link to="/referrals" className="text-sm text-brand-600">← All referrals</Link>
+      <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+        <Link to="/referrals" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700">
+          <span aria-hidden>←</span> All referrals
+        </Link>
         <Card title="Not assigned to you">
           <p className="text-slate-700">
             {d.awaitingAssignment
@@ -332,35 +374,52 @@ export function ReferralDetail() {
   const isParty = side === 'origin' || side === 'target';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <Link to="/referrals" className="text-sm text-brand-600">← All referrals</Link>
+    <div className="mx-auto max-w-3xl space-y-5 p-4 py-6 sm:p-6">
+      <Link to="/referrals" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 transition hover:text-brand-700">
+        <span aria-hidden>←</span> All referrals
+      </Link>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <UrgencyBadge urgency={r.urgency} />
           <StatusBadge status={r.status} />
           {r.override_reason && (
-            <Badge className="bg-violet-100 text-violet-800 ring-violet-600/30"
+            <Badge className="bg-violet-100 text-violet-800 ring-violet-500/30"
                    title="The referring clinician chose a facility other than the top routing suggestion">
               Routing overridden: {humanCode(r.override_reason)}
             </Badge>
           )}
-          <span className="ml-auto font-mono text-sm text-slate-500">{r.referral_code}</span>
+          <span className="erl-nums ml-auto font-mono text-sm font-semibold text-slate-500">{r.referral_code}</span>
         </div>
-        <h1 className="mt-2 text-xl font-bold">{r.patient?.name}</h1>
-        <p className="text-slate-600">{r.patient?.sex}, {r.patient?.age}
+        <h1 className="mt-3 text-xl font-semibold tracking-[-0.025em]">{r.patient?.name}</h1>
+        <p className="mt-1 text-slate-600">{r.patient?.sex}, {r.patient?.age}
           {r.patient?.isPregnant && <Badge className="ml-2 bg-pink-100 text-pink-700 ring-pink-600/30">Pregnant</Badge>}
-          {r.patient?.cbhiMember && <Badge className="ml-2 bg-brand-100 text-brand-700 ring-brand-600/30">CBHI</Badge>}
+          {r.patient?.cbhiMember && <Badge className="ml-2 bg-brand-100 text-brand-800 ring-brand-500/40">CBHI</Badge>}
         </p>
-        {r.provisional_diagnosis && <p className="mt-2 text-sm text-slate-700">{r.provisional_diagnosis}</p>}
-        <p className="mt-2 text-sm text-slate-500">{r.origin_facility_name} → {r.target_facility_name}</p>
-        {sla && <p className={`mt-2 text-sm ${sla.tone}`}>SLA: {sla.text}</p>}
+        {r.provisional_diagnosis && <p className="mt-3 text-sm text-slate-700">{r.provisional_diagnosis}</p>}
+
+        {/* where this referral is going, joined by the brand connector */}
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/80">
+          <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Icon name="building" className="h-4 w-4 text-brand-600" />
+            {r.origin_facility_name}
+          </span>
+          <span className="hidden min-w-[3rem] flex-1 sm:block" aria-hidden>
+            <FlowPulse className="h-2 w-full" />
+          </span>
+          <span className="flex items-center gap-2 text-sm font-semibold text-brand-700">
+            <Icon name="pin" className="h-4 w-4" />
+            {r.target_facility_name}
+          </span>
+        </div>
+
+        {sla && <p className={`mt-3 text-sm ${sla.tone}`}>SLA: {sla.text}</p>}
         {r.receiving_clinician_name && (
-          <div className="mt-3 rounded-lg bg-brand-50 p-3 text-sm">
-            <p className="font-medium text-brand-700">Receiving clinician</p>
-            <p>{r.receiving_clinician_name} · {r.receiving_clinician_phone || 'no phone on file'}</p>
+          <div className="mt-3 rounded-xl bg-brand-50 p-3.5 text-sm ring-1 ring-brand-200">
+            <p className="font-semibold text-brand-800">Receiving clinician</p>
+            <p className="mt-0.5 text-slate-700">{r.receiving_clinician_name} · {r.receiving_clinician_phone || 'no phone on file'}</p>
             {r.bed_reserved && (
-              <p className="mt-1 text-xs text-brand-700">
+              <p className="mt-1.5 text-xs leading-relaxed text-brand-700">
                 Bed reserved in {humanCode(r.reserved_ward_type || 'general')} ward
                 {r.bed_reservation_expires_at && <> — held until {new Date(r.bed_reservation_expires_at).toLocaleString()}</>}.
                 {' '}This holds a real bed on the availability board.
@@ -369,7 +428,7 @@ export function ReferralDetail() {
           </div>
         )}
         {r.created_offline && (
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-slate-500">
             Created offline · synced after {r.sync_lag_minutes} min (not counted against SLA)
           </p>
         )}
@@ -433,19 +492,19 @@ export function ReferralDetail() {
       {/* ---------------- CLINICAL */}
       {!r.clinicalRedacted && (
         <Card title="Clinical detail">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
             {Object.entries(r.clinical || {}).filter(([, v]) => v !== null && v !== undefined && v !== '')
               .map(([k, v]) => (
-                <div key={k}>
-                  <dt className="text-xs uppercase tracking-wide text-slate-500">{humanCode(k)}</dt>
-                  <dd className="font-medium">{String(v)}</dd>
+                <div key={k} className="rounded-xl bg-slate-50 px-3 py-2">
+                  <dt className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{humanCode(k)}</dt>
+                  <dd className="mt-0.5 font-semibold text-slate-900">{String(v)}</dd>
                 </div>
               ))}
           </dl>
           {r.pre_referral?.stabilisationGiven?.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-referral stabilisation</p>
-              <ul className="mt-1 list-inside list-disc text-sm text-slate-700">
+            <div className="mt-4">
+              <SectionLabel>Pre-referral stabilisation</SectionLabel>
+              <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-sm text-slate-700">
                 {r.pre_referral.stabilisationGiven.map((s) => <li key={s}>{s}</li>)}
               </ul>
             </div>
@@ -463,13 +522,13 @@ export function ReferralDetail() {
 
       {r.outcome && !r.clinicalRedacted && (
         <Card title="Outcome">
-          <p className="font-medium">{r.outcome.finalDiagnosis}</p>
-          <p className="text-sm text-slate-600">Disposition: {humanCode(r.outcome.disposition)}</p>
+          <p className="font-semibold tracking-[-0.015em] text-slate-900">{r.outcome.finalDiagnosis}</p>
+          <p className="mt-1 text-sm text-slate-600">Disposition: {humanCode(r.outcome.disposition)}</p>
           {r.outcome.treatmentProvided && <p className="mt-2 text-sm">{r.outcome.treatmentProvided}</p>}
           {r.outcome.followUpInstructions && (
-            <div className="mt-2 rounded-lg bg-brand-50 p-3 text-sm">
-              <p className="font-medium text-brand-700">Follow-up</p>
-              <p>{r.outcome.followUpInstructions}</p>
+            <div className="mt-3 rounded-xl bg-brand-50 p-3.5 text-sm ring-1 ring-brand-200">
+              <p className="font-semibold text-brand-800">Follow-up</p>
+              <p className="mt-0.5 text-slate-700">{r.outcome.followUpInstructions}</p>
             </div>
           )}
         </Card>
@@ -483,12 +542,12 @@ export function ReferralDetail() {
               subtitle="Shown because you are administering this facility">
           <div className="space-y-2">
             {r.feedback.map((fb) => (
-              <div key={fb.id} className="flex items-start justify-between gap-3 rounded-lg bg-slate-50 p-3">
+              <div key={fb.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/70">
                 <div>
-                  <p className="text-sm font-medium text-slate-800">
+                  <p className="text-sm font-semibold text-slate-800">
                     Rated us as the {fb.facility_role === 'origin' ? 'referring' : 'receiving'} hospital
                   </p>
-                  {fb.comment && <p className="text-sm text-slate-600">“{fb.comment}”</p>}
+                  {fb.comment && <p className="mt-0.5 text-sm text-slate-600">“{fb.comment}”</p>}
                 </div>
                 <Stars value={fb.rating} showValue={false} />
               </div>
@@ -499,10 +558,29 @@ export function ReferralDetail() {
 
       {chain.length > 1 && (
         <Card title="Referral chain">
-          <ol className="space-y-1 text-sm">
-            {chain.map((c) => (
-              <li key={c.id} className={c.id === r.id ? 'font-semibold' : 'text-slate-600'}>
-                <span className="font-mono text-xs">{c.referral_code}</span> · {c.target_facility_name} · {humanStatus(c.status)}
+          {/* each hop is a node on the brand's connection rail */}
+          <ol className="relative space-y-3 pl-1 text-sm">
+            {chain.map((c, i) => (
+              <li key={c.id} className="relative flex items-center gap-3">
+                <span className="relative z-10 flex shrink-0 items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ring-4 ring-white ${
+                      c.id === r.id
+                        ? 'bg-brand-600 text-white'
+                        : 'bg-brand-100 text-brand-700 ring-brand-50'
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                </span>
+                {i < chain.length - 1 && (
+                  <span aria-hidden className="absolute left-3 top-6 h-5 w-0.5 bg-brand-200" />
+                )}
+                <span className={`min-w-0 ${c.id === r.id ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
+                  <span className="font-mono text-xs">{c.referral_code}</span> · {c.target_facility_name} ·{' '}
+                  {humanStatus(c.status)}
+                </span>
               </li>
             ))}
           </ol>
@@ -510,17 +588,23 @@ export function ReferralDetail() {
       )}
 
       <Card title="Audit trail">
-        <ol className="space-y-2">
+        <ol className="space-y-2.5">
           {(r.transitions || []).map((t, i) => (
             <li key={i} className="flex gap-3 text-sm">
-              <span className="w-24 shrink-0 text-xs text-slate-500">{timeAgo(t.occurred_at)}</span>
-              <span>
-                <span className="font-medium">{humanCode(t.event)}</span>
-                {t.to_status && t.to_status !== t.from_status && <span className="text-slate-500"> → {humanStatus(t.to_status)}</span>}
+              <span
+                aria-hidden
+                className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-400 ring-4 ring-brand-50"
+              />
+              <span className="w-20 shrink-0 text-xs text-slate-500">{timeAgo(t.occurred_at)}</span>
+              <span className="min-w-0">
+                <span className="font-semibold text-slate-900">{humanCode(t.event)}</span>
+                {t.to_status && t.to_status !== t.from_status && (
+                  <span className="text-slate-500"> → {humanStatus(t.to_status)}</span>
+                )}
                 <span className="block text-xs text-slate-500">
                   {t.actor_user_name}{t.reason_code && ` · ${humanCode(t.reason_code)}`}
                 </span>
-                {t.note && <span className="block text-xs text-slate-600">{t.note}</span>}
+                {t.note && <span className="mt-0.5 block text-xs text-slate-600">{t.note}</span>}
               </span>
             </li>
           ))}
@@ -534,10 +618,10 @@ export function ReferralDetail() {
                  onChange={(e) => setF({ ...f, receivingClinicianName: e.target.value })} /></Field>
           <Field label="Contact phone"><Input value={f.receivingClinicianPhone || ''}
                  onChange={(e) => setF({ ...f, receivingClinicianPhone: e.target.value })} /></Field>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="h-5 w-5 rounded" checked={!!f.bedReserved}
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-slate-50 p-3 text-sm ring-1 ring-slate-200/80">
+            <input type="checkbox" className={`${checkCls} mt-0.5`} checked={!!f.bedReserved}
                    onChange={(e) => setF({ ...f, bedReserved: e.target.checked })} />
-            Reserve a bed — takes a real bed off the availability board
+            <span>Reserve a bed — takes a real bed off the availability board</span>
           </label>
           {f.bedReserved && (
             <Field label="Ward">
@@ -658,13 +742,12 @@ function MyWorkDashboard({ m }) {
   const t = m.totals;
   const a = m.assignedToMe;
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4">
-      <div>
-        <h1 className="text-xl font-bold">My referrals</h1>
-        <p className="text-sm text-slate-500">
-          {m.viewer.name} · {m.viewer.facilityName} — cases assigned to you, and referrals you sent.
-        </p>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow="Clinician workspace"
+        title="My referrals"
+        lede={`${m.viewer.name} · ${m.viewer.facilityName} — cases assigned to you, and referrals you sent.`}
+      />
 
       {/* Cases reception made this clinician responsible for. */}
       {a && (a.open > 0 || a.total > 0) && (
@@ -674,39 +757,36 @@ function MyWorkDashboard({ m }) {
             <Stat label="Open cases" value={a.open}
                   tone={a.open > 0 ? 'text-brand-700' : 'text-slate-900'} />
             <Stat label="Need your response" value={a.needsResponse}
-                  tone={a.needsResponse > 0 ? 'text-red-600' : 'text-slate-900'}
+                  tone={a.needsResponse > 0 ? 'text-danger-600' : 'text-slate-900'}
                   sub="accept or decline" />
             <Stat label="Open emergencies" value={a.openEmergencies}
-                  tone={a.openEmergencies > 0 ? 'text-red-600' : 'text-slate-900'} />
+                  tone={a.openEmergencies > 0 ? 'text-danger-600' : 'text-slate-900'} />
             <Stat label="Outcomes due" value={a.outcomesDue}
-                  tone={a.outcomesDue > 0 ? 'text-amber-600' : 'text-slate-900'} />
+                  tone={a.outcomesDue > 0 ? 'text-ember-600' : 'text-slate-900'} />
           </div>
           {a.needsResponse > 0 && (
-            <Link to="/referrals" className="mt-3 inline-block text-sm font-medium text-brand-700 underline">
+            <Link to="/referrals" className="mt-4 inline-block text-sm font-semibold text-brand-700 underline decoration-brand-300 underline-offset-4 hover:text-brand-800">
               Respond now →
             </Link>
           )}
         </Card>
       )}
 
-      <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">My loop-closure rate</p>
-        <p className={`mt-1 text-4xl font-bold ${m.myLoopClosureRatePct >= 60 ? 'text-emerald-600' : 'text-slate-900'}`}>
-          {m.myLoopClosureRatePct === null ? '—' : `${m.myLoopClosureRatePct}%`}
-        </p>
-        <p className="mt-1 text-sm text-slate-500">
-          {t.loopsClosed} of your closed referrals came back with an acknowledged outcome.
-        </p>
-      </div>
+      <LoopRatePanel
+        label="My loop-closure rate"
+        value={m.myLoopClosureRatePct}
+        tone={m.myLoopClosureRatePct >= 60 ? 'text-emerald-600' : 'text-slate-900'}
+        footnote={`${t.loopsClosed} of your closed referrals came back with an acknowledged outcome.`}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label="Referrals sent" value={t.sent} sub={`${t.emergencies} emergency`} />
         <Stat label="Awaiting response" value={t.awaitingResponse}
-              tone={t.awaitingResponse > 0 ? 'text-blue-600' : 'text-slate-900'} />
+              tone={t.awaitingResponse > 0 ? 'text-brand-700' : 'text-slate-900'} />
         <Stat label="Declined — need reroute" value={t.awaitingReroute}
-              tone={t.awaitingReroute > 0 ? 'text-red-600' : 'text-slate-900'} />
+              tone={t.awaitingReroute > 0 ? 'text-danger-600' : 'text-slate-900'} />
         <Stat label="Outcomes to acknowledge" value={t.outcomesToAcknowledge}
-              tone={t.outcomesToAcknowledge > 0 ? 'text-amber-600' : 'text-slate-900'}
+              tone={t.outcomesToAcknowledge > 0 ? 'text-ember-600' : 'text-slate-900'}
               sub="acknowledging closes the loop" />
         <Stat label="Loops closed" value={t.loopsClosed} tone="text-emerald-600" />
       </div>
@@ -721,7 +801,7 @@ function MyWorkDashboard({ m }) {
         </div>
       </Card>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs leading-relaxed text-slate-400">
         Facility-wide analytics and patient feedback are handled by your hospital's
         IT/quality administrator — this view stays limited to your own work.
       </p>
@@ -729,61 +809,105 @@ function MyWorkDashboard({ m }) {
   );
 }
 
+/** The headline loop-closure panel shared by the clinician and analytics views. */
+function LoopRatePanel({ label, value, tone, footnote, progress, children }) {
+  return (
+    <section className="relative overflow-hidden rounded-2xl bg-white p-5 shadow-erl-md ring-1 ring-brand-200/60">
+      <span aria-hidden className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-brand-300 via-brand-500 to-brand-300" />
+      <SectionLabel>{label}</SectionLabel>
+      <p className={`erl-nums mt-2 text-4xl font-semibold leading-none tracking-[-0.04em] sm:text-5xl ${tone}`}>
+        {value === null || value === undefined ? '—' : `${value}%`}
+      </p>
+      {progress != null && (
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-700"
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
+      )}
+      {footnote && <p className="mt-3 text-sm leading-relaxed text-slate-500">{footnote}</p>}
+      {children}
+    </section>
+  );
+}
+
+/** One ward's live bed count. */
+function WardTile({ label, free, total, stale, ago, onClick }) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      onClick={onClick}
+      className={`rounded-xl bg-slate-50 p-3.5 text-left ring-1 ring-slate-200/70 transition ${
+        onClick ? 'hover:bg-brand-50 hover:ring-brand-300' : ''
+      }`}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className="erl-nums mt-1 text-xl font-semibold leading-none tracking-[-0.03em] text-slate-900">
+        {free}<span className="text-sm font-normal text-slate-400">/{total}</span>
+      </p>
+      <p className={`mt-1 text-xs ${stale ? 'font-medium text-ember-700' : 'text-slate-500'}`}>
+        {ago}{stale && ' · stale'}
+      </p>
+    </Tag>
+  );
+}
+
 /* --------- liaison / triage: their own facility's live queue and beds */
 function FacilityOpsDashboard({ m }) {
   const q = m.queue;
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4">
-      <div>
-        <h1 className="text-xl font-bold">Facility operations</h1>
-        <p className="text-sm text-slate-500">{m.viewer.facilityName} — your live referral workload.</p>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow="Live queue"
+        title="Facility operations"
+        lede={`${m.viewer.facilityName} — your live referral workload.`}
+      />
 
       {q.awaitingAssignment > 0 && (
-        <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
-          <p className="font-semibold text-amber-900">
+        <Notice tone="warn" icon={<Icon name="clock" />}>
+          <p className="font-semibold">
             {q.awaitingAssignment} referral{q.awaitingAssignment === 1 ? '' : 's'} waiting at reception
           </p>
-          <p className="mt-0.5 text-sm text-amber-800">
+          <p className="mt-0.5">
             Assign a clinician so someone is responsible — no doctor can open these cases until you do.
           </p>
-          <Link to="/referrals" className="mt-2 inline-block text-sm font-medium text-amber-900 underline">
+          <Link to="/referrals" className="mt-2 inline-block font-semibold text-ember-700 underline underline-offset-4">
             Open the inbound queue →
           </Link>
-        </div>
+        </Notice>
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Awaiting assignment" value={q.awaitingAssignment}
-              tone={q.awaitingAssignment > 0 ? 'text-amber-600' : 'text-slate-900'}
+              tone={q.awaitingAssignment > 0 ? 'text-ember-600' : 'text-slate-900'}
               sub="nobody responsible yet" />
         <Stat label="Inbound awaiting decision" value={q.inboundAwaitingDecision}
-              tone={q.inboundAwaitingDecision > 0 ? 'text-blue-600' : 'text-slate-900'} />
+              tone={q.inboundAwaitingDecision > 0 ? 'text-brand-700' : 'text-slate-900'} />
         <Stat label="Escalated (SLA breached)" value={q.inboundEscalated}
-              tone={q.inboundEscalated > 0 ? 'text-red-600' : 'text-slate-900'} />
+              tone={q.inboundEscalated > 0 ? 'text-danger-600' : 'text-slate-900'} />
         <Stat label="Accepted, awaiting arrival" value={q.acceptedAwaitingArrival} />
         <Stat label="In transit to us" value={q.inTransit} />
         <Stat label="Outcomes due" value={q.outcomesDue}
-              tone={q.outcomesDue > 0 ? 'text-amber-600' : 'text-slate-900'} />
+              tone={q.outcomesDue > 0 ? 'text-ember-600' : 'text-slate-900'} />
         <Stat label="Beds reserved" value={q.bedsReserved} sub="held off the board" />
         <Stat label="Our outbound awaiting" value={q.outboundAwaiting} />
         <Stat label="Outcomes to acknowledge" value={q.outboundToAcknowledge}
-              tone={q.outboundToAcknowledge > 0 ? 'text-amber-600' : 'text-slate-900'} />
+              tone={q.outboundToAcknowledge > 0 ? 'text-ember-600' : 'text-slate-900'} />
       </div>
 
       <Card title="Bed availability" subtitle="Update these on the Availability tab — routing uses exactly this data">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {m.capacity.length === 0 ? <Empty>No wards reported.</Empty> : m.capacity.map((c) => (
-            <div key={c.ward_type} className="rounded-lg bg-slate-50 p-3">
-              <p className="text-xs uppercase text-slate-500">{humanCode(c.ward_type)}</p>
-              <p className="text-lg font-bold">{c.beds_free}<span className="text-sm font-normal text-slate-500">/{c.beds_total}</span></p>
-              <p className="text-xs text-slate-500">{timeAgo(c.reported_at)}</p>
-            </div>
+            <WardTile key={c.ward_type}
+                      label={humanCode(c.ward_type)}
+                      free={c.beds_free} total={c.beds_total}
+                      ago={timeAgo(c.reported_at)} />
           ))}
         </div>
       </Card>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs leading-relaxed text-slate-400">
         Network-wide analytics and patient feedback are not part of this view.
       </p>
     </div>
@@ -794,32 +918,27 @@ function FacilityOpsDashboard({ m }) {
 function AnalyticsDashboard({ m }) {
   const closure = m.loopClosureRatePct;
   const tone = closure === null ? 'text-slate-400'
-    : closure >= 60 ? 'text-emerald-600' : closure >= 30 ? 'text-amber-600' : 'text-red-600';
+    : closure >= 60 ? 'text-emerald-600' : closure >= 30 ? 'text-ember-600' : 'text-danger-600';
   const oi = m.overrideInsights;
   const isIT = m.scope === 'it_facility_detail';
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4">
-      <div>
-        <h1 className="text-xl font-bold">{isIT ? 'Facility analytics' : 'Network dashboard'}</h1>
-        <p className="text-sm text-slate-500">
-          {isIT
-            ? `${m.facilityName} — detailed analytics and patient feedback for your hospital only.`
-            : 'Referral flow across the network. Clinical records and patient feedback are not shown here.'}
-        </p>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow={isIT ? 'Facility analytics' : 'Network flow'}
+        title={isIT ? 'Facility analytics' : 'Network dashboard'}
+        lede={isIT
+          ? `${m.facilityName} — detailed analytics and patient feedback for your hospital only.`
+          : 'Referral flow across the network. Clinical records and patient feedback are not shown here.'}
+      />
 
-      <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">North star · loop-closure rate</p>
-        <p className={`mt-1 text-5xl font-bold ${tone}`}>{closure === null ? '—' : `${closure}%`}</p>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-          <div className="h-full bg-brand-500 transition-all" style={{ width: `${Math.min(closure || 0, 100)}%` }} />
-        </div>
-        <p className="mt-2 text-sm text-slate-500">
-          Baseline {m.benchmark.loopClosureBaselinePct}% · target {m.benchmark.loopClosureTargetPct}% ·
-          {' '}{m.totals.loopClosed} of {m.totals.terminalCountable} closed referrals
-        </p>
-      </div>
+      <LoopRatePanel
+        label="North star · loop-closure rate"
+        value={closure}
+        tone={tone}
+        progress={closure || 0}
+        footnote={`Baseline ${m.benchmark.loopClosureBaselinePct}% · target ${m.benchmark.loopClosureTargetPct}% · ${m.totals.loopClosed} of ${m.totals.terminalCountable} closed referrals`}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Referrals" value={m.totals.totalReferrals} sub={`${m.totals.emergencyCount} emergency`} />
@@ -835,28 +954,29 @@ function AnalyticsDashboard({ m }) {
               value={m.preReferralCompletenessPct === null ? '—' : `${m.preReferralCompletenessPct}%`}
               target={`baseline ${m.benchmark.preReferralCompletenessBaselinePct}%`} />
         <Stat label="Outcomes awaiting acknowledgement" value={m.totals.outcomesAwaitingAck}
-              tone={m.totals.outcomesAwaitingAck > 0 ? 'text-amber-600' : 'text-slate-900'} />
+              tone={m.totals.outcomesAwaitingAck > 0 ? 'text-ember-600' : 'text-slate-900'} />
         <Stat label="SLA breaches" value={m.totals.slaBreaches}
-              tone={m.totals.slaBreaches > 0 ? 'text-red-600' : 'text-slate-900'} />
+              tone={m.totals.slaBreaches > 0 ? 'text-danger-600' : 'text-slate-900'} />
         <Stat label="Overdue outcomes" value={m.totals.overdueOutcomes}
-              tone={m.totals.overdueOutcomes > 0 ? 'text-amber-600' : 'text-slate-900'}
+              tone={m.totals.overdueOutcomes > 0 ? 'text-ember-600' : 'text-slate-900'}
               sub="due within 72 h" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <Card title="Why referrals are declined" subtitle="The capacity-planning gold mine">
           {m.declineReasons.length === 0 ? <Empty>No declines recorded.</Empty> : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {m.declineReasons.map((d) => {
                 const max = Math.max(...m.declineReasons.map((x) => x.n));
                 return (
                   <li key={d.decline_reason}>
-                    <div className="flex justify-between text-sm">
-                      <span>{humanCode(d.decline_reason)}</span>
-                      <span className="font-semibold">{d.n}</span>
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="text-slate-700">{humanCode(d.decline_reason)}</span>
+                      <span className="erl-nums shrink-0 font-semibold text-slate-900">{d.n}</span>
                     </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-200">
-                      <div className="h-full rounded-full bg-ember-500" style={{ width: `${(d.n / max) * 100}%` }} />
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                      <div className="h-full rounded-full bg-ember-500"
+                           style={{ width: `${(d.n / max) * 100}%` }} />
                     </div>
                   </li>
                 );
@@ -871,27 +991,28 @@ function AnalyticsDashboard({ m }) {
               subtitle="When doctors bypass the top suggestion, the reasons they record show what routing can't see yet">
           {(!oi || oi.overridden === 0) ? <Empty>No overrides recorded.</Empty> : (
             <>
-              <p className="text-sm text-slate-600">
-                <span className="text-lg font-bold text-slate-900">{oi.overrideRatePct ?? 0}%</span> of routed
+              <p className="text-sm leading-relaxed text-slate-600">
+                <span className="text-lg font-semibold text-slate-900">{oi.overrideRatePct ?? 0}%</span> of routed
                 referrals overrode the top suggestion ({oi.overridden} of {oi.totalWithSuggestion}).
               </p>
-              <ul className="mt-3 space-y-2">
+              <ul className="mt-4 space-y-3">
                 {oi.reasons.map((d) => {
                   const max = Math.max(...oi.reasons.map((x) => x.n));
                   return (
                     <li key={d.override_reason}>
-                      <div className="flex justify-between text-sm">
-                        <span>{humanCode(d.override_reason)}</span>
-                        <span className="font-semibold">{d.n}</span>
+                      <div className="flex justify-between gap-3 text-sm">
+                        <span className="text-slate-700">{humanCode(d.override_reason)}</span>
+                        <span className="erl-nums shrink-0 font-semibold text-slate-900">{d.n}</span>
                       </div>
-                      <div className="mt-1 h-1.5 rounded-full bg-slate-200">
-                        <div className="h-full rounded-full bg-violet-500" style={{ width: `${(d.n / max) * 100}%` }} />
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                        <div className="h-full rounded-full bg-violet-500"
+                             style={{ width: `${(d.n / max) * 100}%` }} />
                       </div>
                     </li>
                   );
                 })}
               </ul>
-              <p className="mt-3 rounded-lg bg-violet-50 p-2 text-xs text-violet-900 ring-1 ring-violet-200">
+              <p className="mt-4 rounded-xl bg-violet-50 p-3 text-xs leading-relaxed text-violet-900 ring-1 ring-violet-200">
                 {overrideAdvice(oi.reasons)}
               </p>
             </>
@@ -902,11 +1023,13 @@ function AnalyticsDashboard({ m }) {
 
         <Card title="Referral flow">
           {m.flow.length === 0 ? <Empty>No flow yet.</Empty> : (
-            <ul className="space-y-1.5 text-sm">
+            <ul className="space-y-2 text-sm">
               {m.flow.slice(0, 8).map((fl, i) => (
-                <li key={i} className="flex justify-between gap-2">
-                  <span className="truncate text-slate-600">{fl.source} → {fl.target}</span>
-                  <span className="shrink-0 font-semibold">{fl.n}</span>
+                <li key={i} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                  <span className="truncate text-slate-600">{fl.source}</span>
+                  <span aria-hidden className="shrink-0 text-brand-400">→</span>
+                  <span className="truncate text-slate-600">{fl.target}</span>
+                  <span className="erl-nums ml-auto shrink-0 font-semibold text-slate-900">{fl.n}</span>
                 </li>
               ))}
             </ul>
@@ -946,17 +1069,17 @@ function FacilityFeedbackPanel() {
         : !fb ? <Spinner />
         : fb.count === 0 ? <Empty>No patient feedback yet.</Empty> : (
         <>
-          <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 pb-3">
+          <div className="flex flex-wrap items-center gap-4 border-b border-slate-200 pb-3.5">
             <Stars value={fb.avgRating} count={fb.count} size="text-base" />
             {fb.lowRatings > 0 && (
-              <Badge className="bg-red-100 text-red-800 ring-red-600/30">
+              <Badge className="bg-danger-100 text-danger-800 ring-danger-500/30">
                 {fb.lowRatings} rating{fb.lowRatings > 1 ? 's' : ''} ≤ 2 ★ — review
               </Badge>
             )}
           </div>
-          <ul className="mt-3 space-y-3">
+          <ul className="mt-4 space-y-2.5">
             {fb.items.slice(0, 8).map((i) => (
-              <li key={i.id} className="rounded-lg bg-slate-50 p-3">
+              <li key={i.id} className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/70">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-800">
@@ -1047,43 +1170,40 @@ export function AvailabilityAdmin() {
   }, {});
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <div>
-        <h1 className="text-xl font-bold">{f.name_lat}</h1>
-        <p className="text-sm text-slate-500">
-          Availability board — routing and reservations use exactly this data.
-          Every update is stamped with your name; stale entries lose you appropriate referrals.
-        </p>
-      </div>
+    <div className="mx-auto max-w-3xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow="Availability board"
+        title={f.name_lat}
+        lede="Routing and reservations use exactly this data. Every update is stamped with your name; stale entries lose you appropriate referrals."
+      />
       <ErrorBox error={error} onDismiss={() => setError(null)} />
 
       <Card title="Beds" subtitle="Reservations from accepted referrals decrement these live">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {f.capacity.map((c) => (
-            <button key={c.ward_type} onClick={() => setBedEdit({ wardType: c.ward_type, bedsFree: c.beds_free, bedsTotal: c.beds_total })}
-                    className="rounded-lg bg-slate-50 p-3 text-left ring-1 ring-transparent hover:ring-brand-400">
-              <p className="text-xs uppercase text-slate-500">{humanCode(c.ward_type)}</p>
-              <p className="text-lg font-bold">{c.beds_free}<span className="text-sm font-normal text-slate-500">/{c.beds_total}</span></p>
-              <p className={`text-xs ${c.stale ? 'text-amber-700' : 'text-slate-500'}`}>
-                {timeAgo(c.reported_at)}{c.stale && ' · stale'}
-              </p>
-            </button>
+            <WardTile
+              key={c.ward_type}
+              label={humanCode(c.ward_type)}
+              free={c.beds_free} total={c.beds_total}
+              stale={c.stale} ago={timeAgo(c.reported_at)}
+              onClick={() => setBedEdit({ wardType: c.ward_type, bedsFree: c.beds_free, bedsTotal: c.beds_total })}
+            />
           ))}
         </div>
-        <p className="mt-2 text-xs text-slate-500">Tap a ward to report current free beds.</p>
+        <p className="mt-3 text-xs text-slate-500">Tap a ward to report current free beds.</p>
       </Card>
 
       {Object.entries(groups).map(([cat, capsRows]) => (
         <Card key={cat} title={humanCode(cat)}>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {capsRows.map((c) => (
-              <div key={c.capability_code} className="flex items-center justify-between gap-3 rounded-lg p-2 hover:bg-slate-50">
+              <div key={c.capability_code} className="flex items-center justify-between gap-3 rounded-xl p-2.5 transition hover:bg-brand-50/60">
                 <div className="min-w-0">
                   <p className="truncate font-medium text-slate-800">{c.name_lat}</p>
-                  <p className={`text-xs ${c.stale ? 'text-amber-700' : 'text-slate-500'}`}>
+                  <p className={`mt-0.5 text-xs ${c.stale ? 'font-medium text-ember-700' : 'text-slate-500'}`}>
                     verified {timeAgo(c.verified_at)}{c.verified_by && ` by ${c.verified_by}`}{c.stale && ' · overdue'}
                   </p>
-                  {c.blocking_note && <p className="text-xs text-red-700">{c.blocking_note}</p>}
+                  {c.blocking_note && <p className="mt-0.5 text-xs font-medium text-danger-700">{c.blocking_note}</p>}
                 </div>
                 <Select value={c.status} disabled={saving === c.capability_code}
                         onChange={(e) => setStatus(c.capability_code, e.target.value)}

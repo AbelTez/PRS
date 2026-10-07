@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { get, post, useAuth, humanCode, timeAgo } from './lib';
 import {
-  Button, Card, Field, Input, Select, ErrorBox, Badge, Modal, Spinner, Empty,
+  Button, Card, Field, Input, Select, ErrorBox, Badge, Modal, Spinner, Empty, Notice,
 } from './ui';
+import { PageHead, SectionLabel, Icon, IconTile } from './brand';
 
 /**
  * Facility IT administration.
@@ -24,9 +25,9 @@ const STAFF_ROLES = [
 ];
 
 const STATUS_BADGE = {
-  active: 'bg-emerald-100 text-emerald-800 ring-emerald-600/30',
-  pending: 'bg-amber-100 text-amber-900 ring-amber-600/30',
-  disabled: 'bg-slate-200 text-slate-600 ring-slate-400/30',
+  active: 'bg-emerald-100 text-emerald-800 ring-emerald-500/30',
+  pending: 'bg-ember-100 text-ember-700 ring-ember-500/30',
+  disabled: 'bg-slate-200 text-slate-600 ring-slate-400/40',
 };
 
 export default function ITAdmin() {
@@ -60,44 +61,50 @@ export default function ITAdmin() {
   const others = rows.filter((u) => u.status !== 'pending');
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold">Staff accounts</h1>
-          <p className="text-sm text-slate-500">
-            {user.facilityName} — only accounts you verify here can act in this facility's name.
-          </p>
-        </div>
-        <Button onClick={() => setShowNew(true)}>+ Register staff</Button>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5 p-4 py-6 sm:p-6">
+      <PageHead
+        eyebrow="Facility administration"
+        title="Staff accounts"
+        lede={`${user.facilityName} — only accounts you verify here can act in this facility's name.`}
+        actions={<Button onClick={() => setShowNew(true)}>+ Register staff</Button>}
+      />
 
       <ErrorBox error={error} onDismiss={() => setError(null)} />
 
       {created && (
-        <div className="rounded-lg bg-emerald-50 p-3 text-sm ring-1 ring-emerald-200">
-          <p className="font-medium text-emerald-800">
+        <Notice tone="success" icon={<Icon name="shield" />} onDismiss={() => setCreated(null)}>
+          <p className="font-semibold">
             Account <span className="font-mono">{created.username}</span> created — status: pending verification.
           </p>
-          <p className="text-emerald-700">{created.note}</p>
-          <button onClick={() => setCreated(null)} className="mt-1 text-xs text-emerald-700 underline">dismiss</button>
-        </div>
+          <p className="mt-0.5">{created.note}</p>
+          <button onClick={() => setCreated(null)} className="mt-1.5 font-semibold underline underline-offset-4">
+            dismiss
+          </button>
+        </Notice>
       )}
 
       {pending.length > 0 && (
         <Card title={`Awaiting verification (${pending.length})`}
               subtitle="Check the professional license against the MoH register before activating a clinical account">
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {pending.map((u) => (
-              <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 p-3 ring-1 ring-amber-200">
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900">{u.fullName}
-                    <span className="ml-2 font-mono text-xs text-slate-500">{u.username}</span></p>
-                  <p className="text-sm text-slate-600">{humanCode(u.role)}{u.title && ` · ${u.title}`}</p>
-                  {u.licenseNumber && <p className="text-xs text-slate-500">License: <span className="font-mono">{u.licenseNumber}</span> — verify at MoH HRIS</p>}
-                  <p className="text-xs text-slate-400">Requested {timeAgo(u.createdAt)}</p>
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-ember-50 p-4 ring-1 ring-ember-200">
+                <div className="flex min-w-0 gap-3">
+                  <IconTile name="clip" box="h-10 w-10" tone="soft" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-900">{u.fullName}
+                      <span className="ml-2 font-mono text-xs font-normal text-slate-500">{u.username}</span></p>
+                    <p className="mt-0.5 text-sm text-slate-600">{humanCode(u.role)}{u.title && ` · ${u.title}`}</p>
+                    {u.licenseNumber && (
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        License: <span className="font-mono">{u.licenseNumber}</span> — verify at MoH HRIS
+                      </p>
+                    )}
+                    <p className="mt-0.5 text-xs text-slate-400">Requested {timeAgo(u.createdAt)}</p>
+                  </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => act(u.id, 'verify')} disabled={busy === u.id}>Verify & activate</Button>
+                  <Button onClick={() => act(u.id, 'verify')} disabled={busy === u.id}>Verify &amp; activate</Button>
                   <Button variant="ghost" onClick={() => act(u.id, 'deactivate')} disabled={busy === u.id}>Reject</Button>
                 </div>
               </div>
@@ -108,23 +115,26 @@ export default function ITAdmin() {
 
       <Card title="Registered staff" subtitle="Deactivated accounts lose access immediately, on every device">
         {others.length === 0 ? <Empty>No staff yet.</Empty> : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-200/70">
             {others.map((u) => (
-              <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="font-medium text-slate-900">
-                    {u.fullName}
-                    <span className="ml-2 font-mono text-xs text-slate-500">{u.username}</span>
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    {humanCode(u.role)}{u.title ? ` · ${u.title}` : ''}{u.department ? ` · ${u.department}` : ''}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {u.licenseNumber && <>License <span className="font-mono">{u.licenseNumber}</span> · </>}
-                    {u.verifiedAt
-                      ? `verified ${timeAgo(u.verifiedAt)}${u.verifiedByName ? ` by ${u.verifiedByName}` : ''}`
-                      : 'not verified'}
-                  </p>
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 py-3.5">
+                <div className="flex min-w-0 gap-3">
+                  <IconTile name="nurse" box="h-10 w-10" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-900">
+                      {u.fullName}
+                      <span className="ml-2 font-mono text-xs font-normal text-slate-500">{u.username}</span>
+                    </p>
+                    <p className="mt-0.5 text-sm text-slate-600">
+                      {humanCode(u.role)}{u.title ? ` · ${u.title}` : ''}{u.department ? ` · ${u.department}` : ''}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {u.licenseNumber && <>License <span className="font-mono">{u.licenseNumber}</span> · </>}
+                      {u.verifiedAt
+                        ? `verified ${timeAgo(u.verifiedAt)}${u.verifiedByName ? ` by ${u.verifiedByName}` : ''}`
+                        : 'not verified'}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={STATUS_BADGE[u.status]}>{humanCode(u.status)}</Badge>
