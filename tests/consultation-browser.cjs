@@ -12,7 +12,7 @@ if(!['localhost','127.0.0.1'].includes(new URL(SITE).hostname))throw new Error('
    const context=await browser.newContext({permissions:['camera','microphone'],viewport:{width,height:900}});
    const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
    await page.goto(SITE+'/login');await page.getByLabel('Username',{exact:true}).fill(username);
-   await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL('**/referrals');
+   await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL('**/home');
    return {context,page};
   }
   const a=await doctor('dr.abdi'),b=await doctor('dr.samuel',390);
