@@ -10,6 +10,7 @@ import { UsersModule } from './users/users.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { PortalModule } from './portal/portal.module';
 import { ConsultationModule } from './consultation/consultation.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ConsultationModule } from './consultation/consultation.module';
     FeedbackModule,
     PortalModule,
     ConsultationModule,
+    AiModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

@@ -659,7 +659,7 @@ export function Toaster() {
     info: ['info', 'text-brand-600'],
   };
   return (
-    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-6 sm:items-end sm:px-6">
+    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:items-end sm:px-6 md:bottom-24">
       {toasts.map((x) => {
         const [icon, color] = tones[x.tone] || tones.info;
         return (

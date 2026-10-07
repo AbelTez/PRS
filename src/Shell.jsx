@@ -7,6 +7,8 @@ import { Icon, LogoMark } from './brand';
 import { useWorkload, useWorkloadPolling, summarize } from './workspace';
 import { SENDER_ROLES, RECEPTION_ROLES, OVERSIGHT_ROLES, matchesQuery, compareByPriority } from './referrals';
 import { ConsultationAlerts, CONSULTATION_ROLES } from './consultations/Consultations';
+import AssistantPanel, { AssistantLauncher, AssistantTopButton } from './ai/AssistantPanel';
+import { useAiStore, useAiStatus } from './ai/useAi';
 
 /* ============================================================================
    APP SHELL
@@ -299,6 +301,7 @@ function TopBar({ user, s, referrals, onSignOut, isPatient }) {
         {isPatient && <div className="flex-1" />}
 
         <LanguageToggle />
+        {!isPatient && <AssistantTopButton />}
         {!isPatient && <Notifications s={s} />}
 
         <DropdownMenu
@@ -417,6 +420,9 @@ export default function Shell({ children }) {
   const wl = useWorkload();
   const s = useMemo(() => summarize(wl, user), [wl.referrals, wl.consultations, wl.users, user]); // eslint-disable-line react-hooks/exhaustive-deps
   const items = useNavItems(user, s);
+  const ai = useAiStatus();
+  const panelOpen = useAiStore((x) => x.panelOpen);
+  const assistantOpen = panelOpen && ai.on('chat');
 
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('erl_sidebar') === 'collapsed'; } catch { return false; }
@@ -447,7 +453,8 @@ export default function Shell({ children }) {
     <div className="min-h-screen bg-slate-100">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2">{t('nav.skip')}</a>
       <Sidebar items={items} collapsed={collapsed} onToggle={toggle} />
-      <div className={`md:pl-[72px] ${collapsed ? '' : 'lg:pl-64'} transition-[padding] duration-200`}>
+      {/* the docked assistant takes the right 400px on large screens instead of covering the page */}
+      <div className={`md:pl-[72px] ${collapsed ? '' : 'lg:pl-64'} ${assistantOpen ? 'lg:pr-[400px]' : ''} transition-[padding] duration-200`}>
         <TopBar user={user} s={s} referrals={wl.referrals} onSignOut={signOut} />
         {CONSULTATION_ROLES.includes(user?.role) && !DEMO_MODE && <ConsultationAlerts />}
         <main id="main" className="pb-28 md:pb-0">{children}</main>
@@ -460,6 +467,8 @@ export default function Shell({ children }) {
         </Link>
       )}
       <MobileNav items={items} user={user} onSignOut={signOut} />
+      <AssistantPanel />
+      <AssistantLauncher />
       <Toaster />
     </div>
   );

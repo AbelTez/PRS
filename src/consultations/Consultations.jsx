@@ -4,6 +4,9 @@ import {get, post, useAuth, humanCode, timeAgo} from '../lib';
 import {Button, Card, Field, Input, Select, Textarea, ErrorBox, Notice, Badge, Spinner, Empty} from '../ui';
 import {PageHead} from '../brand';
 import CallPanel from './CallPanel';
+import {useT} from '../i18n';
+import {useAiStatus, useAiCall} from '../ai/useAi';
+import {AiButton, AiCard, AiApply, AiError} from '../ai/AiParts';
 
 export const CONSULTATION_ROLES=['doctor','clinician','specialist'];
 const names={requested:'Awaiting acceptance',active:'In progress',answered:'Opinion submitted',closed:'Closed',declined:'Declined',cancelled:'Cancelled'};
@@ -58,6 +61,12 @@ export function NewConsultation() {
   const [form,setForm]=useState({title:'',summary:'',topic:'general',priority:'routine',consultantId:'',patientId:'',referralId:params.get('referralId')||'',sharingConfirmed:false});
   const clientId=useRef(crypto.randomUUID());
   const field=(key,value)=>setForm(f=>({...f,[key]:value}));
+  // AI: best-match colleague + message draft (suggestions the doctor applies)
+  const [aiQuestion,setAiQuestion]=useState('');
+  const t=useT();const ai=useAiStatus();const matchAi=useAiCall('match-colleague',JSON.stringify([aiQuestion,form.topic,form.patientId]));const draftAi=useAiCall('draft',JSON.stringify([form,aiQuestion]));
+  const patientNames=[patients.find(p=>p.id===form.patientId)?.name];
+  function pickMatch(m){setFacilitySearch('');chooseFacility(m.facilityId);setForm(f=>({...f,consultantId:m.id,sharingConfirmed:false}));if(!form.summary.trim()&&aiQuestion.trim())field('summary',aiQuestion.trim());}
+  async function draftMessage(){const doc=doctors.find(d=>d.id===form.consultantId);const r=await draftAi.run({kind:'consult_request',redactNames:patientNames,context:{topic:form.topic,priority:form.priority,notes:form.summary||aiQuestion,colleagueSpecialty:doc?.specialty}});if(r){setForm(f=>({...f,title:f.title.trim()?f.title:(r.title||''),summary:r.message}));}}
   useEffect(()=>{let alive=true;get('/v1/consultations/facilities').then(r=>{if(alive)setFacilities(r);}).catch(e=>{if(alive)setError(e);}).finally(()=>{if(alive)setFacilitiesLoading(false);});return()=>{alive=false;};},[]);
   useEffect(()=>{
     let alive=true;setSpecialties([]);
@@ -79,6 +88,18 @@ export function NewConsultation() {
   return <div className="mx-auto max-w-4xl space-y-5 p-4 py-6 sm:p-6"><PageHead eyebrow="Doctor to doctor" title="Start a consultation" lede="Talk about any topic. Link a patient or referral only when it helps the discussion."/>
     <form onSubmit={submit} className="space-y-5"><ErrorBox error={error}/>
       <Card title="Choose a colleague" subtitle="Choose their facility, then find the doctor or specialist you want to ask for advice."><div className="space-y-4">
+      {ai.on('matchColleague')&&<div className="space-y-3 rounded-2xl bg-gradient-to-r from-violet-50 to-brand-50 p-4 ring-1 ring-violet-200">
+        <div><p className="font-semibold text-slate-900">{t('ai.colleague.title')}</p><p className="mt-0.5 text-sm text-slate-600">{t('ai.colleague.lede')}</p></div>
+        <div className="flex flex-col gap-2 sm:flex-row"><Input aria-label={t('ai.colleague.title')} value={aiQuestion} maxLength={1000} onChange={e=>setAiQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();if(aiQuestion.trim().length>4)matchAi.run({question:aiQuestion,topic:form.topic,redactNames:patientNames});}}} placeholder={t('ai.colleague.placeholder')}/>
+        <AiButton busy={matchAi.busy} disabled={aiQuestion.trim().length<5} onClick={()=>matchAi.run({question:aiQuestion,topic:form.topic,redactNames:patientNames})}>{t('ai.colleague.button')}</AiButton></div>
+        <AiError error={matchAi.error}/>
+        {matchAi.data&&<AiCard title={t('ai.colleague.results')} onClose={matchAi.reset}>
+          {!matchAi.data.matches.length?<p className="text-slate-600">{t('ai.colleague.none')}</p>:<ol className="space-y-2">{matchAi.data.matches.map((m,i)=><li key={m.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200/80">
+            <div className="min-w-0"><p className="font-semibold text-slate-900">{i+1}. {m.fullName}</p><p className="text-xs text-slate-500">{m.specialty} · {m.facilityName}</p>{m.why&&<p className="mt-1 text-slate-600">{m.why}</p>}</div>
+            <AiApply done={form.consultantId===m.id} onClick={()=>pickMatch(m)}>{form.consultantId===m.id?t('ai.colleague.selected'):t('ai.colleague.select')}</AiApply>
+          </li>)}</ol>}
+        </AiCard>}
+      </div>}
       <Field label="Search facilities" hint="Browse all registered active facilities or type a facility name."><Input aria-label="Search facilities" value={facilitySearch} onChange={e=>{setFacilitySearch(e.target.value);chooseFacility('');}} placeholder="e.g. Black Lion, Zewditu or Ambo"/></Field>
       <Field label="Facility" required><Select aria-label="Facility" required disabled={facilitiesLoading} value={facilityId} onChange={e=>chooseFacility(e.target.value)}><option value="">{facilitiesLoading?'Loading facilities…':'Choose a facility'}</option>{matchingFacilities.map(f=><option key={f.id} value={f.id}>{f.name_lat}</option>)}</Select></Field>
       {!facilitiesLoading&&!matchingFacilities.length&&<p role="status" className="text-sm text-slate-500">No facilities match. Try another name.</p>}
@@ -91,6 +112,7 @@ export function NewConsultation() {
       <Card title="What would you like to discuss?"><div className="space-y-4"><Field label="Title" required><Input required maxLength={160} value={form.title} onChange={e=>field('title',e.target.value)} placeholder="Give your conversation a clear title"/></Field>
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Topic"><Select value={form.topic} onChange={e=>field('topic',e.target.value)}>{['general','patient_case','second_opinion','learning'].map(t=><option key={t} value={t}>{humanCode(t)}</option>)}</Select></Field><Field label="Priority"><Select value={form.priority} onChange={e=>field('priority',e.target.value)}><option value="routine">Routine</option><option value="urgent">Urgent</option></Select></Field></div>
       <Field label="Opening message" hint="Introduce the topic, ask your question, or describe what you want to discuss on the call."><Textarea rows={5} maxLength={10000} value={form.summary} onChange={e=>field('summary',e.target.value)}/></Field>
+      {ai.on('draft')&&<div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><AiButton size="sm" busy={draftAi.busy} onClick={draftMessage}>{t('ai.draft.consult')}</AiButton><span className="text-xs text-slate-500">{t('ai.draft.consultHint')}</span></div><p className="text-xs text-slate-500">{t('ai.disclaimer')}</p><AiError error={draftAi.error}/></div>}
       {form.priority==='urgent'&&<Notice tone="warn">The other doctor may be offline. This request does not guarantee an immediate response.</Notice>}</div></Card>
       <Card title="Optional clinical context" subtitle="Only information you include here is shared with the other doctor."><div className="space-y-4">
         <Field label="Find a patient from your facility" hint="Choose a recent patient below, or search by name. Sample records are marked Test patient."><Input value={patientSearch} onChange={e=>{setPatientSearch(e.target.value);setForm(f=>({...f,patientId:'',sharingConfirmed:false}));}} placeholder="Search patient name (optional)"/></Field>
@@ -111,6 +133,8 @@ export function ConsultationDetail() {
   const [data,setData]=useState(null),[messages,setMessages]=useState([]),[error,setError]=useState(null),[busy,setBusy]=useState(false);
   const [body,setBody]=useState(''),[kind,setKind]=useState('message'),[note,setNote]=useState(''),[call,setCall]=useState(null);
   const cursor=useRef('0'), readCursor=useRef(null),pending=useRef(null);
+  const t=useT();const ai=useAiStatus();const replyAi=useAiCall('draft',JSON.stringify([id,body,kind]));
+  async function draftReply(){const r=await replyAi.run({kind:'chat_reply',redactNames:[data?.patient_name],context:{opening:data?.summary,notes:body,asOpinion:kind==='opinion',thread:messages.slice(-12).map(m=>({mine:m.author_id===user.id,text:m.body}))}});if(r)setBody(r.message);}
   const url=`/v1/consultations/${id}`;
   const refresh=useCallback(async()=>{const r=await get(url);setData(r);return r;},[url]);
   useEffect(()=>{
@@ -157,7 +181,9 @@ export function ConsultationDetail() {
         </article>)}</div>
         {open?<form onSubmit={send} className="space-y-3 border-t border-slate-200 pt-4">
           {consultant&&<Field label="Message type"><Select value={kind} onChange={e=>setKind(e.target.value)}><option value="message">Message</option><option value="opinion">Opinion / discussion summary</option></Select></Field>}
-          <Field label="Your message"><Textarea required rows={3} maxLength={10000} value={body} onChange={e=>setBody(e.target.value)} placeholder="Continue the conversation…"/></Field><Button type="submit" disabled={busy||!body.trim()}>{busy?'Sending…':'Send message'}</Button>
+          <Field label="Your message"><Textarea required rows={3} maxLength={10000} value={body} onChange={e=>setBody(e.target.value)} placeholder="Continue the conversation…"/></Field>
+          {ai.on('draft')&&<p className="text-xs text-slate-500">{t('ai.disclaimer')}</p>}<AiError error={replyAi.error}/>
+          <div className="flex flex-wrap items-center gap-2"><Button type="submit" disabled={busy||!body.trim()}>{busy?'Sending…':'Send message'}</Button>{ai.on('draft')&&<AiButton size="sm" busy={replyAi.busy} onClick={draftReply}>{kind==='opinion'?t('ai.draft.opinion'):t('ai.draft.reply')}</AiButton>}</div>
         </form>:<Notice>{data.status==='requested'?'Messaging and calls become available when the invited doctor accepts.':'This conversation is read-only.'}</Notice>}
       </div></Card>
       <Card title="Documents" subtitle="JPEG, PNG or PDF · up to 1.5 MB per file"><div className="space-y-3">{data.attachments.map(a=><button key={a.id} onClick={()=>download(a)} className="block w-full break-all rounded-xl bg-slate-50 p-3 text-left text-sm font-medium text-brand-700">↓ {a.file_name} <span className="font-normal text-slate-500">({Math.ceil(a.size_bytes/1024)} KB)</span></button>)}{!data.attachments.length&&<p className="text-sm text-slate-500">No documents shared yet.</p>}{open&&<Field label="Share a document"><input type="file" accept="image/jpeg,image/png,application/pdf" disabled={busy} onChange={attach} className="block w-full text-sm"/></Field>}</div></Card>

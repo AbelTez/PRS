@@ -10,6 +10,14 @@ async function api(path, token, body) {
   const res = await fetch(apiBase+'/v1'+path, { method: body ? 'POST':'GET', headers: { 'Content-Type':'application/json', ...(token ? {Authorization:'Bearer '+token}:{}) }, body: body ? JSON.stringify(body):undefined });
   const data = await res.json(); assert.ok(res.ok, `${path}: ${res.status} ${JSON.stringify(data)}`); return data;
 }
+async function aiDraft(page, click) {
+  for (let attempt=1; attempt<=3; attempt++) {
+    const response=page.waitForResponse(x=>x.url().endsWith('/v1/ai/draft') && x.request().method()==='POST',{timeout:35000});
+    await click(); const result=await response; const body=await result.json();
+    if ([429,503].includes(result.status()) && attempt<3) { console.log(`RETRY draft: provider busy (${result.status()}), attempt ${attempt}`); await page.waitForTimeout(20000); continue; }
+    assert.equal(result.status(),201,JSON.stringify(body)); return body;
+  }
+}
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless:true, args:['--no-sandbox'] });
   const errors = [];
@@ -90,6 +98,13 @@ async function api(path, token, body) {
     await dialog.getByLabel('Final diagnosis',{exact:false}).fill('UI test outcome');
     await dialog.getByLabel('Disposition',{exact:false}).selectOption('discharged_home');
     await dialog.getByLabel('Treatment provided',{exact:false}).fill('Synthetic test treatment');
+    if (process.env.TEST_AI_DRAFTS === '1') {
+      const body = await aiDraft(doctor.page,()=>dialog.getByRole('button',{name:'Draft patient instructions',exact:true}).click());
+      assert.ok(body.message && /[\u1200-\u137f]/.test(body.amharic));
+      await doctor.page.waitForFunction(text=>[...document.querySelectorAll('textarea')].some(x=>x.value.includes(text)),body.message);
+      assert.equal((await api(path,sender.token)).status,'IN_CARE');
+      pass('real AI follow-up draft is bilingual, editable and not submitted automatically');
+    }
     await dialog.getByRole('button',{name:/Return outcome to/}).click();
     await dialog.waitFor({state:'hidden'});
     assert.equal((await api(path,sender.token)).status,'OUTCOME_RETURNED');
@@ -119,6 +134,12 @@ async function api(path, token, body) {
     dialog=reception.page.getByRole('dialog');
     assert.equal(await dialog.getByRole('button',{name:'Decline',exact:true}).isDisabled(),true);
     await dialog.getByLabel('Reason',{exact:false}).selectOption('no_specialist');
+    if (process.env.TEST_AI_DRAFTS === '1') {
+      const body=await aiDraft(reception.page,()=>dialog.getByRole('button',{name:'Draft a decline note',exact:true}).click()); assert.ok(body.message);
+      await reception.page.waitForFunction(text=>[...document.querySelectorAll('textarea')].some(x=>x.value===text),body.message);
+      assert.equal((await api('/referrals/'+declined.id,sender.token)).status,'SUBMITTED');
+      pass('reception drafts a decline note without taking the decline action');
+    }
     await dialog.getByRole('button',{name:'Decline',exact:true}).click(); await dialog.waitFor({state:'hidden'});
     assert.equal((await api('/referrals/'+declined.id,sender.token)).status,'DECLINED'); pass('decline requires and saves a coded reason');
     assert.deepEqual(errors,[]);

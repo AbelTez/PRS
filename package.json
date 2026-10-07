@@ -11,6 +11,8 @@
     "dev:api": "npm --prefix server run start:dev",
     "test:deployment": "node tests/deployment-smoke.mjs",
     "test:consultations": "node server/scripts/e2e-consultations.js",
+    "test:ai:guards": "npm run build:api && node server/scripts/test-ai-guards.js",
+    "test:ai": "node server/scripts/e2e-ai.js",
     "seed:consultations": "node server/scripts/seed-consultations.js",
     "preview": "vite preview"
   },
