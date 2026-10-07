@@ -9,6 +9,7 @@ import { FeatureModule } from './modules';
 import { UsersModule } from './users/users.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { PortalModule } from './portal/portal.module';
+import { ConsultationModule } from './consultation/consultation.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PortalModule } from './portal/portal.module';
     UsersModule,
     FeedbackModule,
     PortalModule,
+    ConsultationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

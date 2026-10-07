@@ -160,7 +160,11 @@ export class Audit {
   constructor(private db: Db) {}
 
   async record(e: AuditEntry, client?: PoolClient): Promise<void> {
-    const q = client ? client.query.bind(client) : this.db.pool.query.bind(this.db.pool);
+    // Selecting the chain head and inserting its successor must be serialized
+    // in one transaction, including callers that do not supply a transaction.
+    if (!client) return this.db.tx(c => this.record(e, c));
+    const q = client.query.bind(client);
+    await q('SELECT pg_advisory_xact_lock(73021, 1)');
     const prev = await q(`SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1`);
     const prevHash: string | null = prev.rows.length ? prev.rows[0].row_hash : null;
     const payload = JSON.stringify({

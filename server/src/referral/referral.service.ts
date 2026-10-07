@@ -13,6 +13,7 @@ import {
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'dev-token-secret-change-me';
 
 export interface CreateReferralDto {
+  consultationId?: string;
   id?: string;                      // client-generated UUID (offline-safe, idempotent)
   patientId: string;
   reasonCode: string;
@@ -394,6 +395,13 @@ export class ReferralService {
       : 0;
 
     const row = await this.db.tx(async (c) => {
+      if (dto.consultationId) {
+        if (!/^[0-9a-f-]{36}$/i.test(dto.consultationId)) throw new BadRequestException('Invalid consultation identifier');
+        const consultation = (await c.query('SELECT * FROM consultation WHERE id=$1 FOR UPDATE', [dto.consultationId])).rows[0];
+        if (!consultation || consultation.requester_id !== user.id || consultation.patient_id !== dto.patientId) {
+          throw new ForbiddenException('Only the requesting doctor can create a referral for this consultation patient');
+        }
+      }
       const ins = await c.query(
         `INSERT INTO referral (
            id, referral_code, chain_root_id, patient_id, status, urgency, referral_type,
@@ -472,6 +480,10 @@ export class ReferralService {
         detail: { code, urgency, target: target.name_lat },
       }, c);
 
+      if (dto.consultationId) {
+        await c.query('INSERT INTO consultation_referral (consultation_id,referral_id) VALUES ($1,$2)', [dto.consultationId,id]);
+        await c.query("INSERT INTO consultation_event (consultation_id,actor_id,event,note) VALUES ($1,$2,'referral_created',$3)", [dto.consultationId,user.id,code]);
+      }
       await this.changes.append('referral', id, 'create',
         { id, code, status: 'DRAFT' }, [origin.id, target.id], c);
 
