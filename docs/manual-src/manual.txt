@@ -1,0 +1,645 @@
+@title Ethio Referral Linkage
+@sub User manual for the pilot — what the system does, who does what in it, how to work it day to day, and how it protects the patient's record.
+@meta የሪፈራል ትስስር · Pilot release · October 2026 · Written for staff, administrators and anyone evaluating the system. No technical knowledge assumed.
+
+***
+
+# Contents
+
+| Part | What it covers |
+| --- | --- |
+| 1. What this system is | The problem, the four things in the box, and what it deliberately does not do |
+| 2. The words we use | A short vocabulary — loop closure, reception, SLA, routing, chain |
+| 3. Roles and permissions | All fourteen roles, and the four rules that sit behind them |
+| 4. Onboarding | Bringing a facility live, creating staff accounts, licence verification, first day |
+| 5. Signing in and getting around | Session, language, search, notifications, what each role sees first |
+| 6. Sending a referral | The four steps in full, with every rule that can stop you |
+| 7. Receiving a referral | Reception, assignment, accept, decline, redirect, arrival, outcome |
+| 8. The lifecycle | Every status, who acts next, and the four clocks that run on their own |
+| 9. The screens | Home, list, detail, availability, dashboard, staff accounts |
+| 10. Consultations | Doctor-to-doctor conversations, documents and live calls |
+| 11. The AI assistant | What it does, where, and the limits built around it |
+| 12. Patients | Portal, public tracker, follow-up, ratings |
+| 13. Security and privacy | Accounts, access layers, patient data, the audit chain |
+| 14. Reporting and oversight | Who sees which numbers, and what the numbers mean |
+| 15. Working offline | Poor connectivity, sync, what needs a signal |
+| 16. Running a facility | Bed board discipline, capabilities, keeping routing honest |
+| 17. Limits of the pilot | What is deliberately not built yet |
+| 18. Coded value reference | Every dropdown list in one place |
+
+***
+
+# 1. What this system is
+
+## The problem
+
+A health post sees a woman in obstructed labour. The nearest hospital may or may not have a theatre, an anaesthetist, or a free bed. Someone writes a paper slip, the family finds transport, and the slip and the patient disappear from view. Did she arrive? Was she seen? What was found? The health worker who referred her usually never learns. Nobody can count how often this happens, so nobody can fix it.
+
+Ethio Referral Linkage replaces that slip with a record both hospitals can see, and refuses to let the case quietly end. The receiving hospital has to say what happened; the referring clinician has to acknowledge it. Only then is the referral finished.
+
+## The four things in the box
+
+1. **A referral exchange.** The patient, the diagnosis, the vital signs, the treatment already given and the scans — sent to a facility chosen from those that can actually treat the case, then tracked through every stage until the outcome comes back.
+2. **A capability-aware routing engine.** Instead of guessing, the sending clinician gets a ranked list: who has the capability, who is close, who usually accepts, who has beds free — and, just as importantly, who cannot take this patient and why.
+3. **Doctor-to-doctor consultations.** A second workspace where verified doctors at different hospitals hold a conversation, share documents, and talk on video or audio. A patient is optional; learning and second opinions count.
+4. **An AI assistant.** Text suggestions inside the forms — possible diagnoses, urgency, a facility recommendation, drafted messages. It never acts. Every output is a suggestion a human applies, edits or ignores.
+
+Around those sit a patient portal, a bed availability board, dashboards, staff administration, and an audit trail that records everything.
+
+## What it deliberately does not do
+
+- It is **not an electronic medical record.** It carries what a referral needs, not a lifetime chart.
+- It does **not move patients.** Transport is recorded, not dispatched.
+- It does **not let a doctor browse another hospital's patients.** Access follows a relationship to a specific referral.
+- It does **not decide anything clinical.** The routing engine ranks; the AI suggests; a named human decides and is recorded as having decided.
+
+# 2. The words we use
+
+Six terms appear constantly. They are worth two minutes.
+
+[cols:22,78]
+| Term | What it means here |
+| --- | --- |
+| Referral | One patient, one sending facility, one receiving facility, one reason. It has a code like ERL-K7PM-42 and a status at all times. |
+| Loop closure | The referral is only finished when the receiving hospital returns an outcome and the referring side acknowledges it. A patient who was treated but whose outcome never came back is an open loop, and the system counts it as one. |
+| Reception | The desk at the receiving hospital — liaison, triage or facility administrator — that receives inbound referrals and gives each one to a named clinician. Nothing reaches a doctor without passing through it. |
+| SLA | The time the receiving side has to respond before the system escalates: five minutes for an emergency, thirty for urgent, four hours for routine. |
+| Routing | The ranked suggestion of where to send the patient, built from capability, distance, acceptance history and free beds. |
+| Chain | When a referral is redirected or rerouted, the new referral keeps a link to the old one. The chain is the patient's whole journey, not one hop. |
+
+# 3. Roles and permissions
+
+## The fourteen roles
+
+[cols:26,74]
+| Role | What the account can do |
+| --- | --- |
+| Health extension worker | Register patients, create and send referrals, follow their own outbound cases. |
+| Doctor | Send referrals; receive inbound cases assigned to them; return outcomes; start and join consultations. |
+| Clinician | Same as doctor. The distinction is professional, not technical. |
+| Specialist | Same as doctor, and the usual recipient of consultation requests. |
+| Referral liaison | Reception: sees every inbound referral, assigns each to a clinician, updates the bed board. No clinical authoring. |
+| Triage | Same reception powers as liaison. |
+| Facility administrator | Reception powers, plus the hospital's dashboard and inbound clinical follow-through, plus the audit trail for their facility. |
+| IT administrator | Creates staff accounts, verifies licences, deactivates and reactivates people, sees detailed analytics and patient feedback for their own facility. Never sees a clinical chart. |
+| Woreda health office | Flow and timing across facilities in scope. No clinical detail, no feedback. |
+| Regional health bureau | The same, at regional scope. |
+| Ministry of Health | The same, nationally. |
+| CBHI | Referral validity and the facility pair, for insurance verification. No clinical content at all. |
+| System administrator | Technical custody of the platform, cross-facility account management, audit chain verification. |
+| Patient | Their own referrals only, in a patient-safe view, plus their ratings. |
+
+## The four rules behind the roles
+
+Permissions here are not a long list of checkboxes. Four rules generate almost all of the behaviour, and knowing them explains every "why can't I see this?"
+
+**1. Your facility, not the network.** An account belongs to one facility. An IT administrator registers and manages staff for that facility and no other. A referral is visible to you only if your facility is one of the two parties to it — the sender or the receiver. Everything else returns a refusal, not an empty list.
+
+**2. Reception first.** On the receiving side, a referral belongs to the hospital's reception desk until a clinician is assigned. An unassigned doctor cannot open the chart, even at their own hospital. This is deliberate and it does two things: every patient ends up with exactly one responsible clinician, and patient data is not browsable by staff who have no part in that patient's care. A clinician who returned the outcome or made the decision keeps access to their own case afterwards.
+
+**3. Oversight sees flow, not charts.** Woreda, region, Ministry, CBHI — and the IT administrator — get the shape of the referral: when it moved, how long it waited, which facilities, which urgency. The clinical summary, the pre-referral treatment, the diagnosis and the outcome text are stripped out before the record leaves the server. This is not a UI choice that could be worked around; the fields are removed server-side.
+
+**4. Every read is recorded.** Opening a referral writes an audit entry naming you, your facility and the purpose — care coordination, administration or oversight. So is every download of an attachment. The person who looked is as recorded as the person who acted.
+
+# 4. Onboarding
+
+## Bringing a facility live
+
+A facility must exist, be marked active, and carry three things before it can usefully receive referrals:
+
+1. **Its identity and location** — name in Latin and Amharic script, type, tier, coordinates, phone, whether it runs 24 hours, whether it has an ambulance. The coordinates matter: distance and travel time in the routing engine are computed from them.
+2. **Its capabilities,** each one verified with a date. Routing treats a capability as missing unless the facility has it marked available, and treats a verification older than thirty days as stale. A hospital that stops confirming its capabilities slowly disappears from suggestions — which is the intended behaviour, not a bug.
+3. **Its bed board** — free beds per ward type, reported with a timestamp. Anything older than eight hours is flagged stale to the clinician choosing a destination.
+
+Then one IT administrator account is created for the facility. That account is the root of trust for everyone else there.
+
+## Creating a staff account
+
+There is no self-registration anywhere in the system. The sequence is always the same:
+
+1. The facility's IT administrator registers the person: username, full name, role, phone, title, department. For a doctor, clinician or specialist the **MoH professional licence number is required** — the form refuses to submit without it.
+2. The account is created in **pending** state. A pending account can hold a correct password and still not sign in; the login attempt is refused with a message telling the person to wait for verification.
+3. The IT administrator checks the licence number against the national health-professional register, then presses **Verify and activate**. The system stamps who verified it and when.
+4. The person signs in with the initial password and starts work.
+
+Two details that matter in practice. The initial password is a shared default unless the administrator sets one — change it on first sign-in and treat the default as a temporary handover, not a secret. And an administrator cannot deactivate their own account, so a facility cannot accidentally lock itself out of its own staff list.
+
+## Deactivation
+
+Deactivating an account takes effect immediately and everywhere. The check happens on every single request, not at sign-in, so an open session on a phone that has already been handed back stops working on its next tap. Reactivation restores access and keeps the original verification record.
+
+## Patient access
+
+Patients are not onboarded in the normal sense. A patient record is created by staff during a referral. Two routes then exist:
+
+- a **patient account** linked to that patient record, which shows all their referrals in a patient-safe view;
+- the **public tracker**, which needs the referral code and the phone number on the referral — both, every time. No account, no password.
+
+## First day, by role
+
+- **Sending clinician or health extension worker:** sign in, open Home, confirm you can see "Needs you now", then walk one test referral end to end with a sample patient.
+- **Liaison or triage:** sign in, open the Availability board and make it true. Everything downstream depends on it.
+- **IT administrator:** verify the accounts waiting in your queue, then confirm the facility's capability list and bed board are current.
+- **Facility administrator:** read the dashboard once — particularly the decline reasons — so you know what your hospital looks like from the outside.
+
+# 5. Signing in and getting around
+
+## The session
+
+You sign in with a username and password. A successful sign-in issues a session that lasts twelve hours by default; after that you sign in again. Failed attempts are recorded in the audit log against the account they targeted.
+
+## Language
+
+The whole interface runs in English and Amharic, switchable at any time from the top bar — `EN` / `አማ`. The choice is remembered. Patient-facing follow-up instructions can be drafted in both languages.
+
+## Layout
+
+The same application adapts to the device rather than shipping a reduced mobile version:
+
+- **Large screen:** a sidebar with live counts beside each item.
+- **Tablet:** an icon rail.
+- **Phone:** a top bar, a bottom navigation bar with the three things your role does most, and a floating "New referral" button.
+
+Patients see a deliberately minimal top bar and nothing else.
+
+## Search and notifications
+
+**Search** is global and takes a patient name, a referral code, a diagnosis or a facility name. Typing two letters is enough to start.
+
+**Notifications** gather the things that are waiting on you — a consultation request, accounts awaiting verification, referrals that need a decision. When there is genuinely nothing, it says so rather than showing an empty box.
+
+## Where each role lands
+
+| Role | Opens on |
+| --- | --- |
+| Patient | The portal — their own referrals |
+| Woreda, region, Ministry, CBHI, system administrator | The dashboard |
+| Everyone else | Home — the work waiting on them |
+
+# 6. Sending a referral
+
+Four steps, in order: **Patient → Clinical → Destination → Confirm.** Progress is shown at the top and you can go back.
+
+## Step 1 — Patient
+
+**Find an existing record first.** Search by name or Fayda ID. Matching is honest about its own confidence:
+
+- A **Fayda ID** match is exact.
+- A **phone number** match is near-exact.
+- A **name** match is probabilistic, scored, and ordered by score.
+
+A match scoring between 0.75 and 0.95 is flagged as needing human review and is **never merged automatically**. Two people with the same three names in the same woreda are a real occurrence; the system refuses to guess. Age and sex are shown beside each result so you can tell them apart, and synthetic records carry a **Test patient** label.
+
+**Register a new patient** if there is no match. Given name in Latin or Geʽez script is the minimum, plus sex, plus either a date of birth or an age with its unit — days, weeks, months or years, because a four-day-old and a four-year-old are different patients. Father's and grandfather's names, phone, CBHI membership and pregnancy status are recorded where known.
+
+The phone field asks **whose phone it is.** In much of rural Ethiopia the number belongs to a neighbour, a caregiver or the kebele. Recording that honestly is the difference between reaching the family and calling a stranger.
+
+> Registration works with no network at all. The record is held on the device and syncs when signal returns. The system stores how long the sync took and excludes that delay from every clock — a facility is never penalised for the network.
+
+## Step 2 — Clinical
+
+**Reason for referral** is a coded choice, and it does more than label the case. The reason code sets the default urgency, the capabilities the destination must have, the minimum tier it must be, and the pre-referral stabilisation checklist you are shown. Choosing it correctly is the single highest-leverage action in the form.
+
+**Provisional diagnosis** is required. Presenting complaint is free text and worth writing.
+
+**Vital signs are mandatory.** Five of them: systolic and diastolic blood pressure, pulse, respiratory rate and temperature. Oxygen saturation, MUAC and gestational age appear when relevant. The server rejects a referral with any of the five missing — unless you tick **emergency override**, which then demands a written reason. There is no silent way past this.
+
+Values outside general adult screening bands are flagged High or Low as you type. Paediatric pulse and respiratory-rate bands differ, so those flags only appear for patients aged twelve and above. The flag is a prompt to look again. It is not a diagnosis and it does not block anything.
+
+**Pre-referral stabilisation** is presented as a checklist tailored to the reason code — magnesium sulphate for pre-eclampsia, and so on. **Treatment given** asks for drug, dose, route and time. The reason is blunt: without it the receiving team restarts the workup and the patient is treated twice or not at all.
+
+**Imaging and documents.** Attach the X-ray, MRI, ultrasound photograph or lab PDF. Images and PDFs only, up to 1.5 MB each — compress a photograph before attaching it. Each file's checksum is recorded, and the files travel with the referral so nothing already done is repeated.
+
+## Step 3 — Destination
+
+This is where the routing engine earns its place. It returns two lists.
+
+**Facilities that can treat this patient**, ranked. The ranking is a weighted score, and the weights are configuration, not magic:
+
+[cols:34,18,48]
+| Factor | Weight | How it is read |
+| --- | --- | --- |
+| Distance | 0.35 | Straight-line distance from your facility, converted to an estimated travel time at about 35 km/h — a realistic rural road speed, not a motorway. |
+| Acceptance history | 0.25 | How reliably this facility has actually accepted referrals. A hospital that declines everything sinks. |
+| Free beds | 0.25 | Live free beds in the relevant ward, capped so that five free beds and fifty score the same. |
+| Queue depth | 0.15 | Subtracted, not added. A facility already holding many undecided referrals is a worse destination than its other numbers suggest. |
+
+**Facilities that cannot take this patient** are shown too, with the specific reason — "no anaesthetist", "equipment down", with any note the facility left. This is deliberate. A clinician who sees a nearer hospital missing from the list assumes a bug; a clinician who sees it listed as *closer but no anaesthetist* makes a better decision and trusts the tool.
+
+Two data-freshness rules are visible on this screen. A capability not re-verified for thirty days is treated as stale, and a bed count older than eight hours is marked stale rather than quietly presented as fact.
+
+**Emergencies bypass the tier floor.** For an emergency the engine ignores the reason code's minimum-tier rule and offers the nearest capable facility from tier 2 upwards.
+
+Then you choose — and two rules may ask you to justify the choice:
+
+- **Not the top suggestion?** An override reason is required, from a fixed list. These reasons are read later: they are how the hospital learns what routing cannot see yet, such as a road the engine thinks is passable.
+- **Skipping a tier?** A tier-skip reason is required, from its own list. Emergencies are exempt.
+
+You cannot refer a patient to your own facility.
+
+## Step 4 — Confirm
+
+Review everything and send. Three things happen that are worth knowing about.
+
+**A lawful basis is recorded.** For a routine or urgent referral that is the patient's consent, stamped with the time and the method. For an emergency it is vital interest. This is a field in the record, not a tick-box in a policy document.
+
+**A referral code is generated** — `ERL-` plus six characters and a check digit. The alphabet excludes I, O, 0 and 1, because the code gets read aloud down a bad phone line. The patient receives it by SMS and can track the referral with it.
+
+**A signed validity token is minted** for insurance verification. It carries the referral code, the two facilities, the tier transition and a hashed patient identifier. It contains no clinical information whatsoever and expires after thirty days.
+
+The referral is now visible to the receiving hospital, and the response clock has started.
+
+# 7. Receiving a referral
+
+## It arrives at reception, not at a doctor
+
+An inbound referral lands with the hospital's referral reception — liaison, triage or facility administrator. Reception sees the whole inbound queue, with the unassigned cases counted in the navigation badge and sorted most urgent first.
+
+Reception's job is to pick the right clinician. The assignment screen lists the facility's active clinical staff with **how many open cases each already has**, so the choice is informed rather than habitual. A note can be attached explaining the choice — "on call for obstetrics tonight". The clinician is notified and becomes responsible.
+
+Until that happens, no clinician at the receiving hospital can open the chart. A doctor who navigates to the referral is told plainly whether it is still at reception or has gone to a colleague, and is pointed at the liaison if they think it should be theirs.
+
+Reception cannot assign a case to an account that is not yet verified, and cannot assign outside its own facility.
+
+## The decision
+
+The assigned clinician has four options, and the system treats all four as legitimate outcomes.
+
+**Accept.** Confirms the hospital can receive the patient. You record the receiving clinician and a contact phone, and you may **reserve a bed**.
+
+> Reservations here are real. Reserving a bed decrements the ward's live free-bed count, so the availability other facilities see stays true. If the ward has nothing left, the system refuses the reservation and tells you to update the board or accept without one. Availability shown to senders is never fiction.
+
+A reservation does not last forever: six hours for an emergency, twelve for urgent, twenty-four for routine. If the patient has not departed by then the reservation lapses, the bed goes back on the board, and the sending side is asked to reroute.
+
+**Decline.** A coded reason is required — free-text declines are rejected by the server. The nine reasons are listed in section 18. The sending team is immediately asked to reroute, and the reasons aggregate into the capacity-planning view that tells a region it is short of anaesthetists rather than short of goodwill. One special case: **an emergency is never left sitting declined** — it escalates immediately.
+
+**Redirect.** Hands the referral to a facility better placed to receive the patient. This creates a new referral linked to the original, so the chain stays intact and the patient's journey can be read as one story.
+
+**Request information.** When what you were sent is not enough to decide, ask a specific question. The referral waits with the sending side until they answer.
+
+## Arrival, care and outcome
+
+**Departure** is marked by the sending side, with transport mode and escort. This starts the arrival clock at the receiving facility. A patient may also self-present without a recorded departure, and the system accepts that.
+
+**Arrival** is confirmed by the receiving side. Three methods are supported: scanning the patient's QR code, entering the referral code, or staff attestation. Transit time is computed automatically when a departure was recorded.
+
+**Start care** records who is treating the patient.
+
+**Return the outcome.** This is the step the whole system exists for. A final diagnosis and a disposition are required — the disposition from a fixed list, so the data is countable. Treatment provided and follow-up instructions are free text, and the follow-up instructions are shown to the patient in their portal and sent to them by SMS. If the patient needs onward referral, that is a disposition and a new referral, not an abandonment.
+
+**Acknowledge the outcome.** The sending clinician confirms they have read it. That single action is what closes the loop and ends the referral as completed.
+
+A death can be recorded at any stage from transit onwards and closes the referral with that disposition.
+
+Once a referral is closed it is **immutable** — readable forever, editable never.
+
+# 8. The lifecycle
+
+## The path a referral is measured against
+
+Sent → Acknowledged → Accepted → In transit → Arrived → In care → Outcome returned → Loop closed.
+
+Most referrals do not travel that path cleanly, so the system names every deviation instead of losing it.
+
+## Every status
+
+[cols:24,50,26]
+| Status | What it means | Who acts next |
+| --- | --- | --- |
+| Draft | Created, not yet sent. | Sender |
+| Sent | Submitted; the response clock is running. | Receiving reception |
+| Escalated | The response deadline passed without a decision. | Receiving reception, urgently |
+| Acknowledged | The receiving side has seen it but not yet decided. | Assigned clinician |
+| Info requested | The receiving side needs something before deciding. | Sender |
+| Declined | Refused with a coded reason. | Sender — reroute |
+| Redirected | Passed to a better-placed facility; a linked referral was created. | The new destination |
+| Accepted | The hospital will receive the patient; a bed may be reserved. | Sender — mark departed |
+| Acceptance lapsed | The bed reservation expired before departure. | Sender — reroute |
+| In transit | The patient is on the way. | Receiving side — confirm arrival |
+| Not arrived | The arrival window passed with no arrival. | Sender — trace the patient |
+| Arrived | The patient reached the facility. | Receiving clinician |
+| In care | Treatment under way. | Receiving clinician |
+| Referred onward | Sent on from the receiving facility. | The onward destination |
+| Outcome returned | The receiving side has reported what happened. | Sender — acknowledge |
+| Closed: completed | The loop closed properly. | Nobody |
+| Closed: not arrived | The patient never arrived and the case was closed. | Nobody |
+| Closed: declined everywhere | No facility could take the patient. | Nobody |
+| Closed: cancelled | Withdrawn by the sender. | Nobody |
+| Closed: deceased | The patient died. | Nobody |
+| Closed: lost to follow-up | Thirty days with no trace after a non-arrival. | Nobody |
+
+## The four clocks that run without anyone pressing anything
+
+[cols:30,70]
+| Clock | What it does |
+| --- | --- |
+| Response deadline | Five minutes for an emergency, thirty for urgent, four hours for routine, measured from submission. On expiry the referral escalates and becomes visibly overdue. The list shows minutes remaining and turns to "overdue" rather than hiding it. |
+| Bed reservation | Six hours for an emergency, twelve for urgent, twenty-four for routine. On expiry the reservation lapses and the bed returns to the board. |
+| Arrival grace | Six hours for an emergency, twenty-four for urgent, forty-eight for routine. On expiry the referral becomes Not arrived and an SMS goes to the referring clinician asking them to trace the patient. |
+| Lost to follow-up | Thirty days in Not arrived closes the referral as lost. This counts **against** the loop-closure rate, which is the point: a patient who vanished is a failure the numbers should show. |
+
+Time spent waiting because a device was offline is excluded from these clocks.
+
+## Who may do what
+
+The transitions are enforced on the server, by side. Only the sending side can submit, mark departed, reroute, supply information, cancel or acknowledge an outcome. Only the receiving side can acknowledge, accept, decline, redirect, request information, confirm arrival, start care or return an outcome. The system itself fires escalation, lapse, grace expiry and loss. An attempt to do something from the wrong side, or from a closed referral, is refused with an explanation of what is actually allowed from that state — the browser cannot talk the server into it.
+
+# 9. The screens
+
+## Home
+
+Home answers one question: what is waiting on me? The top band summarises the day — how many cases need you, how many are waiting for assignment, how many you are waiting on another facility for, open emergencies, and how many are close to or past their deadline.
+
+Below that, **Needs you now** lists each case with the single next step named: *Assign a clinician*, *Accept or decline*, *Confirm arrival*, *Return the outcome*, *Reroute — declined*, *Send requested info*, *Mark departed*, *Acknowledge outcome*. One case, one verb. When nothing is waiting it says you are caught up rather than showing an empty table.
+
+Then, depending on role: referrals you sent that have had no decision yet, patients accepted or on their way to you, the bed availability summary, and — for IT administrators — the accounts waiting for licence verification.
+
+## Referrals
+
+The full list, with five views: **Needs action**, **Active**, **In transit**, **Closed**, **All**. Default order is most urgent first, then the tightest remaining deadline, then newest.
+
+Search covers patient name, referral code, provisional diagnosis and either facility name. Filters narrow to inbound, outbound, assigned to me, or unassigned. Each row shows the patient, the route from and to, the status, the named next step, and the deadline or age of the case.
+
+A clinician's list is not the hospital's queue. It contains their own outbound referrals plus the inbound cases reception assigned to them — a consequence of the reception-first rule, not a filter you can switch off. Very large result sets are capped at the two hundred most urgent, and the list says so instead of silently truncating.
+
+## A referral in detail
+
+Four tabs.
+
+- **Overview** — a lifecycle strip showing where the case is and what comes next; the next step for you with one sentence explaining why it is yours; the patient; the clinical summary with vital-sign flags; pre-referral stabilisation and treatment given; who referred, with their licence number and facility tier; the receiving clinician and contact phone; any bed reservation and until when; and the returned outcome when it exists.
+- **Documents** — the imaging and reports, downloadable. Every download is audited.
+- **Chain** — the redirects, reroutes and onward referrals for this patient, so a journey across four facilities reads as one thing.
+- **Activity** — every change, newest first, with who made it and when. This is the audit trail, shown to the people who are party to the case.
+
+Oversight roles see this screen with the clinical sections replaced by a line explaining that they see flow and timing, not the chart.
+
+## Availability
+
+Free beds by ward type, with the time each number was reported. Reservations from accepted referrals decrement it live. Liaison, triage, clinicians and facility administrators can post updates.
+
+This screen is the one with the most leverage per minute spent on it: routing reads exactly these numbers. A stale board sends you patients you cannot take and hides you from the ones you can.
+
+## Dashboard
+
+What you see depends on your role, by design.
+
+- **A clinician or health extension worker** sees their own work: cases assigned to them, their referrals by status, their volumes.
+- **A facility administrator** sees the hospital: flow, status breakdown, the bed position, **why referrals are declined**, and **routing override intelligence** — the reasons clinicians gave when they bypassed the top suggestion. Those two panels are the capacity-planning material; they turn individual frustrations into a procurement case.
+- **An IT administrator** sees detailed analytics for their own facility, including patient feedback linked to the referral, the ordering clinician and the hospital pair.
+- **Oversight roles** see network flow metrics across their scope, and no feedback and no clinical detail.
+
+## Staff accounts
+
+For IT administrators, facility administrators and system administrators. Two sections: accounts awaiting verification, each showing the licence number to check against the register, and the registered staff list with role, licence and status. Verify, add, deactivate, reactivate. A system administrator sees all facilities; everyone else sees their own.
+
+# 10. Consultations
+
+## What it is for
+
+The second workspace. Two verified doctors at different hospitals hold a conversation — professional collaboration, teaching, a second opinion, or a specific patient. A patient is optional, and that matters: a junior doctor should be able to ask a question without inventing a case to attach it to.
+
+Only active, verified doctors, clinicians and specialists can take part. Both sides must be verified — not merely active — to start or receive a request.
+
+## Starting one
+
+1. **Find the colleague.** Browse or search the registered active facilities and pick one. The specialty list then shows only specialties that verified active colleagues at that facility actually have. Filter by specialty, by name, or both, and choose the doctor. Changing facility clears the previous doctor selection, so a request cannot accidentally go to someone you can no longer see.
+2. **Describe it.** A clear title, a topic — general, patient case, second opinion or learning — a priority of routine or urgent, and an opening message.
+3. **Add clinical context, if any.** Choose a patient from your own facility's recent records, or link an existing referral, or neither. Only what you include is shared. If you attach a patient or referral you must explicitly confirm you are authorised to share it; the server refuses the request otherwise.
+
+The invited doctor **accepts** or **declines with a reason**. Nothing is shared with them before they accept beyond the request itself.
+
+## Working in an open consultation
+
+- **Messages** are persistent and append-only. A message can be marked as a plain message or as an **opinion / discussion summary**, which is styled distinctly so the substance stands out from the chat. Only the consulting doctor can submit an opinion. A revised opinion is a new entry; nothing is edited away.
+- **Documents** — JPEG, PNG or PDF, up to 1.5 MB. The file's actual contents are checked against its claimed type, so renaming a file does not get it in.
+- **A live call.** Either side can start a video or audio call. The other side gets a ringing banner anywhere in the signed-in workspace and must press **Join**; a call never connects by itself. Controls are mute, camera on or off, and leave. **Nothing is recorded.** Ringing expires after ninety seconds, a dropped connection is detected within about forty-five seconds, and a call ends after fifty-five minutes. Only one live call per conversation.
+- **Closing.** The doctor who asked closes the conversation, optionally acknowledging the opinion with a closing note. A general conversation does not need an opinion before closing. Closed conversations stay fully readable.
+- **Turning it into a referral.** If the conversation was about a patient, the requesting doctor can carry the shared summary straight into the referral form. The referral's own validations and the receiving hospital's reception assignment still apply in full — a consultation does not create a shortcut.
+
+Every consultation carries its own activity log: who was invited, who accepted, when documents were shared, when calls started and ended.
+
+Browser microphone and camera permission is required for calls. Hospital and mobile networks often block direct peer connections, so reliable calling needs a relay configured on the server — a successful call between two laptops on the same office network is not evidence that the hospital network will work.
+
+# 11. The AI assistant
+
+## The stance
+
+Everything the assistant produces is a **suggestion**. Nothing it says is applied until a person applies it. The routing engine, the required vital signs, the override reasons and the referral state machine all remain authoritative — the assistant cannot change a status, send a referral, or overrule a validation.
+
+Every suggestion carries a visible line reminding you to verify it clinically, and a dismiss control.
+
+## What it does, and where
+
+[cols:30,45,25]
+| Feature | What you get | Where |
+| --- | --- | --- |
+| Case assistant | Possible diagnoses with a likelihood, a suggested urgency with the red flags behind it, a reason code from the platform's own list, first-line advice before transfer, what to monitor during transfer, and what important detail you have not entered | New referral, clinical step |
+| Facility recommendation | One pick from the routing engine's eligible list with the reason, plus a runner-up; if it is not the top-ranked facility it suggests the override reason you will need | New referral, destination step |
+| Best-match colleague | The three most suitable verified doctors for your question, selectable in one click | New consultation |
+| Drafting | A consultation message, a reply or opinion, a decline note, or patient follow-up instructions in English and simple Amharic | Consultations, decline and outcome panels |
+| Assistant chat | "How do I…" questions about the platform and general clinical questions, aware of the page you are on, in English or Amharic | The side panel, anywhere |
+
+Clinical and sending roles have the assistant. **Patients, IT administrators and oversight roles have no AI access at all.**
+
+## The limits built around it
+
+These are worth knowing, because they are what make the feature safe enough to use on real work.
+
+- **Closed choices are re-validated on the server.** A suggested reason code is checked against the real list. A suggested facility is checked against a freshly computed routing result for your facility and the selected reason — a browser cannot smuggle an ineligible hospital in by claiming the AI chose it. A suggested colleague is checked against the same directory the consultation form uses. Anything that fails is dropped.
+- **Identifiers are stripped before anything leaves the server.** Phone numbers, e-mail addresses, long identity numbers and known patient names are removed from free text first.
+- **Prompts are never stored.** A successful call writes an audit entry recording the feature, the model, the token count and the latency — not what was typed.
+- **There is a per-user rate limit**, a few requests per minute, so one person cannot exhaust the facility's quota.
+- **It can be switched off entirely.** With the feature disabled the controls disappear from the interface and the endpoints refuse.
+- **It fails politely.** If the provider is slow or overloaded, an alternative model is tried; if that fails you get a short message saying the assistant could not answer and that you can continue without it. The form never blocks.
+
+## Using it well
+
+Ask it about management, danger signs, what to check before transfer, or how to do something in the platform. Give it the clinical picture, not the patient's identity. Do not type names or phone numbers — redaction is a safety net, not a licence. And read its reason, not just its answer: a facility recommendation whose reasoning is wrong is more useful to you than one that is merely confident.
+
+# 12. Patients
+
+## Two ways in
+
+**The portal**, for a patient with an account: all their referrals, newest first.
+
+**The public tracker**, for everyone else: the referral code from their SMS plus the phone number on the referral. Both factors are required every time, and the phone is matched on its last nine digits so +251 91…, 091… and 91… all work. A wrong combination tells them the phone does not match, and the lookup is recorded in the audit log.
+
+## What a patient sees
+
+A patient-safe view — never the clinical chart:
+
+- where they stand, in plain words, with the referral code;
+- which facility referred them and which received them, with address and phone for both;
+- the name of the clinician who will be treating them, once assigned;
+- their **follow-up instructions** once care is complete, which are also sent by SMS;
+- their own ratings.
+
+## Ratings
+
+Once the patient has been received — or once the referral is closed — they can rate **both** hospitals separately, one to five stars, with an optional comment: the facility that referred them, and the facility that treated them. A rating can be edited afterwards.
+
+Visibility is narrow and deliberate. The patient sees their own ratings. The facility's IT administrator sees feedback about **their own facility only**, linked to the referral, the clinician who ordered it and the hospital pair, so it can actually be acted on. Doctors, liaisons, other hospitals and oversight roles do not see it.
+
+# 13. Security and privacy
+
+This section is the one to read before the system touches a real patient.
+
+## Accounts
+
+- Passwords are stored as bcrypt hashes. The system cannot tell you anyone's password because it does not have it.
+- An account begins **pending** and cannot sign in until its own facility's IT administrator verifies it. Clinical roles cannot be created without a licence number.
+- A session lasts twelve hours by default.
+- Account status is checked on **every request**. Deactivation is immediate on every device, not at next sign-in.
+- Failed sign-ins are written to the audit log against the targeted account.
+
+## Four layers of authorisation
+
+Every request passes through all four.
+
+1. **Role.** The endpoint declares which roles may call it; anything else is refused with the reason.
+2. **Party to the referral.** Your facility must be the sender or the receiver. Oversight roles are explicitly *not* a party — and neither is an IT administrator, even when their own facility is one of the two. Administration is not care.
+3. **Reception-first assignment.** At the receiving facility a clinician reads the chart only once it has been assigned to them, or if they themselves made the decision or returned the outcome.
+4. **Data minimisation.** For oversight roles and IT administrators the clinical summary, pre-referral record, diagnosis and outcome are removed from the response on the server before it is sent.
+
+## Patient data
+
+- The **Fayda ID** and **phone number** are not stored in searchable plain fields. Lookups match a peppered one-way hash, so the system can find a patient by a number it does not keep in readable form in its index.
+- Records are **never auto-merged** on name similarity. Anything in the uncertain band goes to human review.
+- **Test data is flagged** at the record level and excluded from operational measures such as routing queue depth.
+- Clinical free text is treated as sensitive throughout: it is what gets stripped for oversight, and what gets redacted before any AI call.
+
+## The audit trail
+
+Every action and every read writes a row to an append-only log: who, which facility, what action, which record, the stated purpose, and the time.
+
+Each row is hashed together with the hash of the row before it, forming a chain. Changing or deleting a past entry breaks every hash after it, and there is a verification endpoint that walks the whole chain and reports the exact row where it breaks. Chain writes are serialised, so two hospitals acting at the same moment cannot fork the chain. Audit review is available to system administrators, facility administrators and woreda offices.
+
+## Documents
+
+Images and PDFs only, 1.5 MB each, checksummed on arrival. Access follows the referral: only the clinical teams party to it, subject to the assignment rule. Consultation uploads are additionally verified by inspecting the file's actual contents. Every download is audited. A closed referral accepts no new attachments.
+
+## Consultations
+
+Every record, document and signalling request re-checks that you are one of the two participants. There is no administrative bypass and no public room link. Audio and video travel directly between the two browsers or through a configured relay — never through the database. Connection details are visible only to the two participants and are discarded when the call ends or expires. Lifecycle changes are serialised per conversation, and retried requests are idempotent, so a flaky connection cannot create duplicate consultations or duplicate messages.
+
+## Insurance verification
+
+The validity token given for insurance purposes carries the referral code, the two facilities, the tier transition, a hashed patient identifier and an expiry. It is signed, so it can be verified without a database lookup, and it contains **no clinical content** — a verifier learns that a referral is valid, not what it was for. It expires after thirty days.
+
+## Honest gaps
+
+Security claims are only useful if the gaps are stated too. In this pilot:
+
+- There is **no multi-factor authentication**, no password-expiry policy and no automatic lockout after repeated failed attempts. Failures are recorded, not blocked.
+- The initial password is a shared default unless the administrator sets one.
+- The phone and Fayda values are kept in a column intended for encryption at rest, but the pilot does not apply application-level encryption to them. **Protect the database itself** — infrastructure access is the real boundary here.
+- SMS delivery is simulated: messages are recorded and logged rather than sent through a live gateway until one is connected.
+- The background clocks are driven by traffic in the hosted deployment rather than by a guaranteed worker, so an escalation may fire late on an idle system.
+- The AI rate limit is per server instance and resets on restart; it is not a shared quota.
+
+# 14. Reporting and oversight
+
+## Three levels of visibility
+
+1. **Oversight roles — woreda, region, Ministry:** network flow metrics across their scope. Volumes, status mix, timeliness, loop closure. No clinical content, no patient feedback.
+2. **IT administrator:** detailed analytics for their own facility, including patient feedback with its linkage to the referral and the ordering clinician.
+3. **Every other facility role:** their own work only. No other facility's detail, no feedback.
+
+## The numbers that matter
+
+- **Loop closure rate** — the share of referrals that reached a proper close. Cancelled referrals are excluded from the denominator; **lost to follow-up is counted against you**, because a patient who vanished is exactly what the metric should expose.
+- **Decline reasons, aggregated.** The single most useful table in the system for planning. "No specialist" appearing two hundred times across a zone is a staffing case; "no bed" is a capacity case.
+- **Routing overrides, with their reasons.** Where clinicians systematically disagree with the engine, and why. This is how the routing model gets corrected by the people using it.
+- **Timeliness** — response times against the deadline, transit times, and how often cases escalate.
+- **Patient feedback** — ratings of both sides of each referral, visible only to the facility being rated.
+
+# 15. Working offline
+
+Connectivity in rural Ethiopia is not a special case; it is the normal case.
+
+- **Patient registration works entirely offline.** The record is created on the device and synchronised when signal returns.
+- **Sync lag is measured and excluded.** The system stores the gap between when the device created the record and when the server received it, and never counts that delay against a facility's response times. The referral detail screen states plainly that a case was created offline and synced some minutes later.
+- **Changes are replayed per facility.** Each facility's devices pull the changes relevant to their own scope rather than the whole database.
+- **Live features need a connection.** Routing suggestions, the AI assistant, consultations and calls are online features. Everything is designed so that losing signal mid-form does not lose work in progress.
+- **Updates arrive by polling**, on a cadence tuned for the pilot rather than for instant delivery: the consultation inbox every ten seconds, an open conversation every four, call signalling more often while a call is ringing or live. Guaranteed push notifications and offline alerting are future work.
+
+# 16. Running a facility
+
+Three habits keep the system honest. They take minutes a day and they are the whole difference between a tool people trust and a tool people work around.
+
+**Keep the bed board true.** Routing reads it directly. An over-stated board brings you patients you cannot take; an under-stated one sends patients past you to a hospital an hour further away. Update it at shift change, and remember that accepting with a reservation moves the number for you.
+
+**Re-verify capabilities.** Each capability carries a verification date, and after thirty days routing treats it as stale. If the theatre is down, mark the capability unavailable and leave a note — the note is shown to the referring clinician as the reason they cannot send to you, which is far better for everyone than an unexplained decline later.
+
+**Keep the staff list current.** Verify new accounts promptly — an unverified clinician cannot be assigned a case, so a pending account is a hole in the on-call rota. Deactivate leavers the same day; it takes effect everywhere immediately.
+
+And one for facility administrators: read the decline-reason and override panels on your dashboard monthly. They are the clearest statement available of what your hospital looks like to the facilities around it.
+
+# 17. Limits of the pilot
+
+Stated plainly so that nobody is surprised.
+
+- This is a **pilot**. Sample staff accounts and synthetic patients are labelled *Sample* or *Test patient*; keep genuine patient data out of demonstration environments.
+- Authentication has no second factor and no lockout. See section 13.
+- SMS is simulated until a gateway is connected. Follow-up instructions and trace alerts are recorded, not yet delivered by a carrier.
+- Reliable calling across hospital and mobile networks requires a relay configured by whoever operates the deployment.
+- There is no guaranteed background job runner, so automatic escalations and expiries can be late on a quiet system.
+- Scheduling, reminders and persistent push notifications are not built.
+- Consultations are not implemented in the browser-only showcase build, which has no backend; neither is the AI assistant, because it has nowhere to keep its key.
+- Vital-sign flags use general adult screening bands. Paediatric bands are not implemented beyond suppressing adult flags for children.
+- The AI assistant is a demonstration feature intended for synthetic cases. Verify everything clinically.
+
+# 18. Coded value reference
+
+Every closed list in the system, in one place. These are fixed vocabularies: the server rejects anything else, which is what makes the analytics countable.
+
+## Urgency
+
+Emergency · Urgent · Routine
+
+## Decline reasons
+
+No bed · No specialist · Equipment down · No supplies · Outside catchment · Wrong tier · Capacity exceeded · Patient should be treated locally · Other
+
+## Routing override reasons
+
+Patient preference · Family located there · Transport availability · Known specialist · Previous care there · Suggested facility unreachable · Cost considerations · Other
+
+## Tier-skip reasons
+
+Emergency, life-threatening · Intermediate facility lacks capability · Intermediate facility closed · Intermediate facility declined previously · Patient already assessed at the intermediate facility · Other
+
+## Transport modes
+
+Ambulance · Public · Private · Walk · Stretcher · Animal · Other
+
+## Dispositions
+
+Discharged home · Admitted · Referred onward · Back-referred · Absconded · Died · Discharged against medical advice
+
+## Arrival confirmation methods
+
+QR scan · Code entry · Staff attestation
+
+## Consultation topics
+
+General · Patient case · Second opinion · Learning
+
+## Mandatory vital signs
+
+Systolic blood pressure · Diastolic blood pressure · Pulse · Respiratory rate · Temperature
+
+## Default timings
+
+[cols:40,20,20,20]
+| Setting | Emergency | Urgent | Routine |
+| --- | --- | --- | --- |
+| Response deadline | 5 minutes | 30 minutes | 4 hours |
+| Bed reservation held | 6 hours | 12 hours | 24 hours |
+| Arrival grace period | 6 hours | 24 hours | 48 hours |
+
+Lost to follow-up: 30 days in Not arrived. Capability verification treated as stale after 30 days. Bed counts treated as stale after 8 hours. Attachments: 1.5 MB maximum, images and PDF only. These values are configuration and can be tuned per deployment.
+
+***
+
+> **A closing note for whoever owns this system.** The design has one recurring theme: refuse to lose the patient, and refuse to pretend. Vitals cannot be skipped silently. A bed reservation takes a real bed. A facility that cannot help is shown with its reason rather than hidden. An override must be explained. A patient who never arrived is counted against the loop-closure rate. The audit chain makes its own tampering visible. Whatever is built on top of this, keeping that theme intact matters more than any individual feature.
